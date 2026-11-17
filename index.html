@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Atlanta Indie Bookshop Crawl</title>
+    <meta
+      name="description"
+      content="Interactive map and route optimizer for independent bookstores across Atlanta and Decatur."
+    />
+    <meta property="og:title" content="Atlanta Indie Bookshop Crawl" />
+    <meta
+      property="og:description"
+      content="Interactive map and route optimizer for independent bookstores across Atlanta and Decatur."
+    />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Crawl Route Planner">
+        <header class="sidebar-header">
+          <p class="eyebrow">Atlanta &amp; Decatur Literary Trail</p>
+          <h1 class="site-title">Atlanta Indie Bookshop Crawl</h1>
+          <p class="site-subtitle">
+            Chart an optimized route across Atlanta’s beloved independent bookshops by car, bike, or MARTA.
+          </p>
+        </header>
+
+        <section class="planner-panel" aria-labelledby="planner-heading">
+          <div class="section-header-row">
+            <h2 id="planner-heading" class="section-heading">Plan My Crawl</h2>
+          </div>
+
+          <form id="crawl-form" class="planner-form" novalidate>
+            <div class="form-group">
+              <span id="start-location-label" class="field-label">Start Location</span>
+              <div id="start-autocomplete-container" class="autocomplete-shell"></div>
+              <div class="quick-picks" aria-label="Quick start landmarks">
+                <span class="quick-picks-label">Quick start:</span>
+                <div id="quick-start-buttons" class="quick-picks-buttons"></div>
+              </div>
+              <p id="selected-origin-readout" class="origin-readout" aria-live="polite"></p>
+            </div>
+
+            <div class="form-group">
+              <label for="departure-time" class="field-label">Departure Time</label>
+              <input
+                type="datetime-local"
+                id="departure-time"
+                name="departureTime"
+                class="text-input"
+              />
+            </div>
+
+            <fieldset class="form-group mode-fieldset">
+              <legend class="field-label">Travel Mode</legend>
+              <div class="mode-toggle" role="radiogroup" aria-label="Travel Mode">
+                <label class="mode-option">
+                  <input type="radio" name="travelMode" value="DRIVING" checked />
+                  <span>Drive</span>
+                </label>
+                <label class="mode-option">
+                  <input type="radio" name="travelMode" value="TRANSIT" />
+                  <span>MARTA / Transit</span>
+                </label>
+                <label class="mode-option">
+                  <input type="radio" name="travelMode" value="BICYCLING" />
+                  <span>Bike</span>
+                </label>
+              </div>
+            </fieldset>
+
+            <div class="form-group">
+              <div class="store-list-header">
+                <span class="field-label">Select Bookstores</span>
+                <div class="store-list-actions">
+                  <button type="button" id="select-all-btn" class="text-action-btn">Select All</button>
+                  <span aria-hidden="true" class="separator">·</span>
+                  <button type="button" id="clear-stores-btn" class="text-action-btn">Clear</button>
+                </div>
+              </div>
+              <ul id="store-list" class="store-list" aria-label="Participating independent bookstores"></ul>
+            </div>
+
+            <div id="route-notice" class="notice-banner" role="alert" hidden></div>
+
+            <div class="form-actions">
+              <button type="submit" id="generate-route-btn" class="primary-btn">
+                Generate Route
+              </button>
+              <button type="button" id="reset-route-btn" class="secondary-btn" hidden>
+                Clear Route
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <section
+          id="itinerary-container"
+          class="itinerary-section"
+          aria-live="polite"
+          aria-label="Route Itinerary"
+        ></section>
+      </aside>
+
+      <main class="map-pane" aria-label="Interactive Bookstore Map">
+        <div id="map" class="map-canvas"></div>
+      </main>
+    </div>
+
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>
