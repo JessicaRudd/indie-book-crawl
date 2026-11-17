@@ -220,6 +220,11 @@ body {
   min-height: 1.1em;
 }
 
+.origin-readout.is-error {
+  color: var(--error-text);
+  font-weight: 500;
+}
+
 .text-input {
   width: 100%;
   min-height: 42px;
@@ -292,8 +297,10 @@ input[type='checkbox']:focus-visible {
 
 .store-list-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 6px 10px;
 }
 
 .store-list-actions {
@@ -322,6 +329,33 @@ input[type='checkbox']:focus-visible {
 
 .text-action-btn:hover {
   text-decoration: underline;
+}
+
+.location-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.location-action-btn:hover:not(:disabled) {
+  text-decoration: none;
+  background-color: var(--accent-sage-soft);
+  border-color: var(--accent-sage);
+}
+
+.location-action-btn.is-active {
+  background-color: var(--accent-sage-soft);
+  border-color: var(--accent-sage);
+  color: var(--accent-sage);
+}
+
+.location-action-btn:disabled {
+  opacity: 0.65;
+  cursor: wait;
 }
 
 .store-filter-input {
@@ -589,6 +623,163 @@ input[type='checkbox']:focus-visible {
 .stop-badge.is-origin {
   background-color: var(--accent-orange-soft);
   color: var(--accent-orange);
+}
+
+.itinerary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-hairline);
+}
+
+.itinerary-action-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-parchment);
+  color: var(--text-espresso);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.itinerary-action-btn:hover {
+  background-color: var(--bg-linen);
+  border-color: var(--accent-sage);
+  color: var(--accent-sage);
+}
+
+.itinerary-action-btn.is-primary-action {
+  background-color: var(--accent-sage-soft);
+  border-color: var(--accent-sage);
+  color: var(--accent-sage);
+}
+
+.itinerary-action-btn.is-primary-action:hover {
+  background-color: var(--accent-sage);
+  color: #fffdf8;
+}
+
+.save-route-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding-top: 6px;
+}
+
+.save-route-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 0.8125rem;
+}
+
+.save-route-confirm-btn {
+  appearance: none;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background-color: var(--accent-orange);
+  color: #fffdf8;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.save-route-confirm-btn:hover {
+  background-color: var(--accent-orange-hover);
+}
+
+.action-feedback {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--accent-sage);
+}
+
+.share-fallback-input {
+  width: 100%;
+  min-height: 34px;
+  padding: 5px 8px;
+  font-size: 0.75rem;
+  margin-top: 4px;
+}
+
+.saved-routes-section {
+  border-top: 1px solid var(--border-hairline);
+  padding-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.saved-routes-section[hidden] {
+  display: none;
+}
+
+.saved-routes-count {
+  font-size: 0.75rem;
+  color: var(--text-cocoa);
+  font-variant-numeric: tabular-nums;
+}
+
+.saved-routes-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.saved-route-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.saved-route-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.saved-route-name {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-espresso);
+}
+
+.saved-route-meta {
+  font-size: 0.75rem;
+  color: var(--text-cocoa);
+}
+
+.saved-route-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 4px;
 }
 
 .legs-list {

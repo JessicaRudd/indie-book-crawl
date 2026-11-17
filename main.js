@@ -4,6 +4,7 @@ import { ATLANTA_CENTER, BOOKSTORES, QUICK_START_LOCATIONS } from './data.js';
 const USAGE_ATTRIBUTION_ID = 'gmp_mcp_codeassist_v1_aistudio';
 
 const MAX_ROUTE_STOPS = 26;
+const SAVED_ROUTES_STORAGE_KEY = 'atlanta-indie-bookshop-crawl:saved-routes:v1';
 
 const state = {
   map: null,
@@ -12,18 +13,22 @@ const state = {
   selectedOrigin: {
     label: QUICK_START_LOCATIONS[0].label,
     coords: { ...QUICK_START_LOCATIONS[0].coords },
+    isCurrentLocation: false,
   },
-  selectedStoreIds: BOOKSTORES.filter((store) => store.defaultSelected).map((store) => store.id),
+  selectedStoreIds: [],
   filterQuery: '',
   stopOrderByStoreId: {},
   storeMarkers: new Map(),
   originMarker: null,
   routePolylines: [],
+  lastRoutePlan: null,
+  lastTravelMode: 'DRIVING',
   libs: {},
 };
 
 const dom = {
   form: document.getElementById('crawl-form'),
+  useMyLocationBtn: document.getElementById('use-my-location-btn'),
   autocompleteContainer: document.getElementById('start-autocomplete-container'),
   quickStartButtons: document.getElementById('quick-start-buttons'),
   originReadout: document.getElementById('selected-origin-readout'),
@@ -37,6 +42,9 @@ const dom = {
   generateBtn: document.getElementById('generate-route-btn'),
   resetBtn: document.getElementById('reset-route-btn'),
   itineraryContainer: document.getElementById('itinerary-container'),
+  savedRoutesSection: document.getElementById('saved-routes-section'),
+  savedRoutesCount: document.getElementById('saved-routes-count'),
+  savedRoutesList: document.getElementById('saved-routes-list'),
   mapContainer: document.getElementById('map'),
 };
 
@@ -91,12 +99,138 @@ function clearNotice() {
   dom.noticeBanner.hidden = true;
 }
 
-function updateOriginReadout() {
-  if (state.selectedOrigin.label) {
+function updateOriginReadout(errorMessage = '') {
+  if (!dom.originReadout) return;
+
+  if (errorMessage) {
+    dom.originReadout.textContent = errorMessage;
+    dom.originReadout.classList.add('is-error');
+    return;
+  }
+
+  dom.originReadout.classList.remove('is-error');
+  if (state.selectedOrigin.isCurrentLocation && state.selectedOrigin.coords) {
+    const { lat, lng } = state.selectedOrigin.coords;
+    dom.originReadout.textContent = `Starting from: Current location (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+  } else if (state.selectedOrigin.label) {
     dom.originReadout.textContent = `Starting from: ${state.selectedOrigin.label}`;
   } else {
     dom.originReadout.textContent = '';
   }
+}
+
+function setAutocompleteDisplayText(text) {
+  if (!state.autocompleteEl) return;
+  try {
+    state.autocompleteEl.value = text;
+  } catch {
+    // Ignore if the web component does not accept programmatic string assignment.
+  }
+}
+
+function updateUseLocationButton() {
+  if (!dom.useMyLocationBtn) return;
+  dom.useMyLocationBtn.classList.toggle('is-active', Boolean(state.selectedOrigin.isCurrentLocation));
+}
+
+function updateOriginMarkerOnMap(panToOrigin = false) {
+  if (!state.map || !state.libs.marker || !state.selectedOrigin.coords) return;
+  const { AdvancedMarkerElement } = state.libs.marker;
+
+  if (state.originMarker) {
+    state.originMarker.map = null;
+    state.originMarker = null;
+  }
+
+  state.originMarker = new AdvancedMarkerElement({
+    map: state.map,
+    position: state.selectedOrigin.coords,
+    title: `Start: ${state.selectedOrigin.label}`,
+  });
+  state.originMarker.append(createOriginPinElement());
+
+  if (panToOrigin) {
+    state.map.panTo(state.selectedOrigin.coords);
+    if ((state.map.getZoom() ?? 10) < 12) {
+      state.map.setZoom(12);
+    }
+  }
+}
+
+function requestCurrentLocation({ silentIfBlocked = false } = {}) {
+  if (!('geolocation' in navigator)) {
+    if (!silentIfBlocked) {
+      const msg =
+        'Location services are not supported by your browser. Search an address or pick a quick-start landmark.';
+      updateOriginReadout(msg);
+      showNotice(msg, true);
+    }
+    return;
+  }
+
+  const labelEl = dom.useMyLocationBtn?.querySelector('span');
+  if (dom.useMyLocationBtn) {
+    dom.useMyLocationBtn.disabled = true;
+    if (labelEl) labelEl.textContent = 'Locating...';
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      const coords = {
+        lat: Number(position.coords.latitude.toFixed(6)),
+        lng: Number(position.coords.longitude.toFixed(6)),
+      };
+      setAutocompleteDisplayText(
+        `My Current Location (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`
+      );
+      state.selectedOrigin = {
+        label: 'My Current Location',
+        coords,
+        isCurrentLocation: true,
+      };
+      updateOriginReadout();
+      renderQuickStartButtons();
+      updateUseLocationButton();
+      updateOriginMarkerOnMap(true);
+      clearNotice();
+
+      if (dom.useMyLocationBtn) {
+        dom.useMyLocationBtn.disabled = false;
+        if (labelEl) labelEl.textContent = 'Use My Location';
+      }
+    },
+    (error) => {
+      if (dom.useMyLocationBtn) {
+        dom.useMyLocationBtn.disabled = false;
+        if (labelEl) labelEl.textContent = 'Use My Location';
+      }
+      if (silentIfBlocked) return;
+
+      const rawMsg = (error?.message || '').toLowerCase();
+      let msg;
+      if (rawMsg.includes('permissions policy') || rawMsg.includes('feature policy')) {
+        msg =
+          'Location access is blocked inside this embedded frame. Open the app directly in a new tab or enter an address below.';
+      } else if (error.code === error.PERMISSION_DENIED) {
+        msg =
+          'Location access was denied. Allow location access in your browser site settings, search an address, or pick a quick-start landmark.';
+      } else if (error.code === error.TIMEOUT) {
+        msg =
+          'Location request timed out. Please try again, search an address, or pick a quick-start landmark.';
+      } else {
+        msg =
+          'Unable to retrieve your current location right now. Please search an address or choose a quick-start landmark.';
+      }
+
+      updateOriginReadout(msg);
+      showNotice(msg, true);
+    },
+    {
+      enableHighAccuracy: false,
+      timeout: 12000,
+      maximumAge: 120000,
+    }
+  );
 }
 
 function renderQuickStartButtons() {
@@ -105,20 +239,20 @@ function renderQuickStartButtons() {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'quick-pick-btn';
-    if (state.selectedOrigin.label === loc.label) {
+    if (!state.selectedOrigin.isCurrentLocation && state.selectedOrigin.label === loc.label) {
       btn.classList.add('is-active');
     }
     btn.textContent = loc.shortLabel;
     btn.addEventListener('click', () => {
+      setAutocompleteDisplayText(loc.label);
       state.selectedOrigin = {
         label: loc.label,
         coords: { ...loc.coords },
+        isCurrentLocation: false,
       };
-      if (state.autocompleteEl) {
-        state.autocompleteEl.value = loc.label;
-      }
       updateOriginReadout();
       renderQuickStartButtons();
+      updateUseLocationButton();
       clearNotice();
     });
     fragment.appendChild(btn);
@@ -349,9 +483,11 @@ function initAutocomplete() {
     state.selectedOrigin = {
       label: autocomplete.value.trim(),
       coords: null,
+      isCurrentLocation: false,
     };
     updateOriginReadout();
     renderQuickStartButtons();
+    updateUseLocationButton();
   });
 
   autocomplete.addEventListener('gmp-select', async ({ placePrediction }) => {
@@ -366,9 +502,11 @@ function initAutocomplete() {
       state.selectedOrigin = {
         label,
         coords: place.location.toJSON(),
+        isCurrentLocation: false,
       };
       updateOriginReadout();
       renderQuickStartButtons();
+      updateUseLocationButton();
       clearNotice();
     }
   });
@@ -377,6 +515,7 @@ function initAutocomplete() {
   dom.autocompleteContainer.appendChild(autocomplete);
   updateOriginReadout();
   renderQuickStartButtons();
+  updateUseLocationButton();
 }
 
 function clearRouteOverlays() {
@@ -433,14 +572,14 @@ function getSelectedDepartureDate(travelMode) {
 }
 
 async function computeOptimizedRoute(originInput, selectedStores, travelMode, departureDate) {
-  const { Route } = state.libs.routes;
+  const { Route, TrafficModel, RoutingPreference, TravelMode } = state.libs.routes;
   const lastStore = selectedStores[selectedStores.length - 1];
   const intermediateStores = selectedStores.slice(0, -1);
 
   const request = {
     origin: originInput,
     destination: lastStore.coords,
-    travelMode,
+    travelMode: TravelMode?.[travelMode] ?? travelMode,
     fields: [
       'path',
       'legs',
@@ -461,10 +600,14 @@ async function computeOptimizedRoute(originInput, selectedStores, travelMode, de
   if (travelMode === 'DRIVING') {
     if (departureDate) {
       request.departureTime = departureDate;
-      request.routingPreference = 'TRAFFIC_AWARE_OPTIMAL';
-      request.trafficModel = 'BEST_GUESS';
+    }
+    // Routes API forbids TRAFFIC_AWARE_OPTIMAL (and trafficModel) when optimizeWaypointOrder is true.
+    if (departureDate && intermediateStores.length === 0) {
+      request.routingPreference =
+        RoutingPreference?.TRAFFIC_AWARE_OPTIMAL ?? 'TRAFFIC_AWARE_OPTIMAL';
+      request.trafficModel = TrafficModel?.BEST_GUESS ?? 'bestguess';
     } else {
-      request.routingPreference = 'TRAFFIC_AWARE';
+      request.routingPreference = RoutingPreference?.TRAFFIC_AWARE ?? 'TRAFFIC_AWARE';
     }
   } else if (travelMode === 'TRANSIT' && departureDate) {
     request.departureTime = departureDate;
@@ -508,7 +651,7 @@ async function computeOptimizedRoute(originInput, selectedStores, travelMode, de
 // Routes API TRANSIT does not optimize or accept intermediate waypoints, so multi-stop
 // MARTA trips are computed chronologically leg-by-leg in the user's selected order.
 async function computeChronologicalTransitRoute(originInput, selectedStores, departureDate) {
-  const { Route } = state.libs.routes;
+  const { Route, TravelMode } = state.libs.routes;
   const routes = [];
   const legs = [];
   let totalDurationMs = 0;
@@ -522,7 +665,7 @@ async function computeChronologicalTransitRoute(originInput, selectedStores, dep
     const request = {
       origin: legOrigin,
       destination: legDestination,
-      travelMode: 'TRANSIT',
+      travelMode: TravelMode?.TRANSIT ?? 'TRANSIT',
       departureTime: new Date(cursorTimeMs),
       fields: ['path', 'legs', 'viewport', 'durationMillis', 'distanceMeters', 'localizedValues'],
       internalUsageAttributionIds: [USAGE_ATTRIBUTION_ID],
@@ -632,8 +775,388 @@ function renderRoute(routePlan, travelMode) {
   });
   state.map.fitBounds(bounds, { top: 48, right: 48, bottom: 48, left: 48 });
 
+  state.lastRoutePlan = routePlan;
+  state.lastTravelMode = travelMode;
   renderItinerary(routePlan, travelMode);
   dom.resetBtn.hidden = false;
+}
+
+function readSavedRoutes() {
+  try {
+    const raw = window.localStorage.getItem(SAVED_ROUTES_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeSavedRoutes(routes) {
+  try {
+    window.localStorage.setItem(SAVED_ROUTES_STORAGE_KEY, JSON.stringify(routes));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getDefaultCrawlName(orderedStores) {
+  const firstArea = orderedStores[0]?.neighborhood?.split('·')[0]?.trim() || 'Atlanta';
+  const count = orderedStores.length;
+  return `${firstArea} Crawl (${count} ${count === 1 ? 'stop' : 'stops'})`;
+}
+
+function buildShareableRouteUrl(orderedStoreIds, travelMode) {
+  const url = new URL(window.location.href);
+  url.search = '';
+  url.searchParams.set('stops', orderedStoreIds.join(','));
+  url.searchParams.set('mode', travelMode);
+  if (state.selectedOrigin.label) {
+    url.searchParams.set('origin', state.selectedOrigin.label);
+  }
+  if (state.selectedOrigin.coords) {
+    url.searchParams.set('lat', state.selectedOrigin.coords.lat.toFixed(6));
+    url.searchParams.set('lng', state.selectedOrigin.coords.lng.toFixed(6));
+  }
+  if (dom.departureTime.value) {
+    url.searchParams.set('time', dom.departureTime.value);
+  }
+  return url.toString();
+}
+
+function buildGoogleMapsDirectionsUrl(orderedStores, travelMode) {
+  const modeParamMap = {
+    DRIVING: 'driving',
+    TRANSIT: 'transit',
+    BICYCLING: 'bicycling',
+  };
+  const params = new URLSearchParams({
+    api: '1',
+    travelmode: modeParamMap[travelMode] || 'driving',
+  });
+
+  if (state.selectedOrigin.coords) {
+    params.set('origin', `${state.selectedOrigin.coords.lat},${state.selectedOrigin.coords.lng}`);
+  } else if (state.selectedOrigin.label) {
+    params.set('origin', state.selectedOrigin.label);
+  }
+
+  const destination = orderedStores[orderedStores.length - 1];
+  if (destination) {
+    params.set('destination', destination.address || `${destination.coords.lat},${destination.coords.lng}`);
+  }
+
+  const intermediates = orderedStores.slice(0, -1).slice(0, 9);
+  if (intermediates.length > 0) {
+    params.set(
+      'waypoints',
+      intermediates.map((store) => store.address || `${store.coords.lat},${store.coords.lng}`).join('|')
+    );
+  }
+
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
+function buildItineraryTextDocument(routePlan, travelMode) {
+  const modeLabels = {
+    DRIVING: 'Drive',
+    TRANSIT: 'MARTA / Transit',
+    BICYCLING: 'Bike',
+  };
+  const lines = [
+    'ATLANTA INDIE BOOKSHOP CRAWL — ROUTE ITINERARY',
+    '================================================',
+    `Travel Mode: ${modeLabels[travelMode] || travelMode}`,
+    `Start Location: ${state.selectedOrigin.label || 'Custom start'}`,
+  ];
+
+  if (dom.departureTime.value) {
+    lines.push(`Departure Time: ${new Date(dom.departureTime.value).toLocaleString()}`);
+  }
+
+  lines.push(
+    `Total Travel Time: ${formatDurationMs(routePlan.totalDurationMs)}`,
+    `Total Distance: ${formatMiles(routePlan.totalDistanceMeters)}`,
+    '',
+    'STOP SEQUENCE',
+    '-------------',
+    `S. ${state.selectedOrigin.label || 'Start'}`
+  );
+
+  routePlan.orderedStores.forEach((store, idx) => {
+    lines.push(`${idx + 1}. ${store.name} (${store.neighborhood})`);
+    lines.push(`   ${store.address}`);
+    if (store.website || store.instagram) {
+      lines.push(`   ${[store.website, store.instagram ? `IG ${store.instagram}` : ''].filter(Boolean).join(' · ')}`);
+    }
+  });
+
+  lines.push('', 'TURN-BY-TURN DIRECTIONS', '-----------------------');
+
+  routePlan.legs.forEach((entry, idx) => {
+    const dur = entry.leg.localizedValues?.duration || formatDurationMs(entry.leg.durationMillis ?? 0);
+    const dist = entry.leg.localizedValues?.distance || formatMiles(entry.leg.distanceMeters ?? 0);
+    lines.push('', `Leg ${idx + 1}: ${entry.fromLabel} -> ${entry.toLabel} (${dur}, ${dist})`);
+    if (entry.leg.steps && entry.leg.steps.length > 0) {
+      entry.leg.steps.forEach((step, stepIdx) => {
+        const stepDist = step.localizedValues?.distance;
+        const stepDur = step.localizedValues?.staticDuration;
+        const meta = [stepDist, stepDur].filter(Boolean).join(' · ');
+        lines.push(`  ${stepIdx + 1}. ${buildStepInstructionText(step)}${meta ? ` (${meta})` : ''}`);
+      });
+    }
+  });
+
+  lines.push(
+    '',
+    `Share Link: ${buildShareableRouteUrl(routePlan.orderedStores.map((s) => s.id), travelMode)}`
+  );
+
+  return lines.join('\n');
+}
+
+function downloadItineraryText(routePlan, travelMode) {
+  const text = buildItineraryTextDocument(routePlan, travelMode);
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const blobUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = blobUrl;
+  anchor.download = 'atlanta-bookshop-crawl-itinerary.txt';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+}
+
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Fall through to execCommand fallback in restricted iframes.
+    }
+  }
+
+  try {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const ok = document.execCommand('copy');
+    textarea.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+function renderSavedRoutes() {
+  if (!dom.savedRoutesSection || !dom.savedRoutesList || !dom.savedRoutesCount) return;
+
+  const savedRoutes = readSavedRoutes();
+  if (savedRoutes.length === 0) {
+    dom.savedRoutesSection.hidden = true;
+    dom.savedRoutesList.replaceChildren();
+    return;
+  }
+
+  dom.savedRoutesSection.hidden = false;
+  dom.savedRoutesCount.textContent = `${savedRoutes.length} saved`;
+
+  const modeLabels = {
+    DRIVING: 'Drive',
+    TRANSIT: 'MARTA / Transit',
+    BICYCLING: 'Bike',
+  };
+  const fragment = document.createDocumentFragment();
+
+  savedRoutes.forEach((saved) => {
+    const li = document.createElement('li');
+    li.className = 'saved-route-card';
+
+    const topRow = document.createElement('div');
+    topRow.className = 'saved-route-top';
+
+    const nameEl = document.createElement('h3');
+    nameEl.className = 'saved-route-name';
+    nameEl.textContent = saved.name;
+
+    topRow.appendChild(nameEl);
+
+    const metaEl = document.createElement('div');
+    metaEl.className = 'saved-route-meta';
+    const parts = [
+      `${saved.storeIds.length} ${saved.storeIds.length === 1 ? 'stop' : 'stops'}`,
+      modeLabels[saved.travelMode] || saved.travelMode,
+      saved.totalDurationText,
+      saved.totalDistanceText,
+    ].filter(Boolean);
+    metaEl.textContent = parts.join(' · ');
+
+    const originMeta = document.createElement('div');
+    originMeta.className = 'saved-route-meta';
+    originMeta.textContent = `From: ${saved.origin?.label || 'Custom start'}`;
+
+    const actionsRow = document.createElement('div');
+    actionsRow.className = 'saved-route-actions';
+
+    const loadBtn = document.createElement('button');
+    loadBtn.type = 'button';
+    loadBtn.className = 'itinerary-action-btn is-primary-action';
+    loadBtn.textContent = 'Load Route';
+    loadBtn.addEventListener('click', () => loadSavedRoute(saved));
+
+    const copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.className = 'itinerary-action-btn';
+    copyBtn.textContent = 'Copy Link';
+    copyBtn.addEventListener('click', async () => {
+      const url = new URL(window.location.href);
+      url.search = '';
+      url.searchParams.set('stops', saved.storeIds.join(','));
+      url.searchParams.set('mode', saved.travelMode || 'DRIVING');
+      if (saved.origin?.label) url.searchParams.set('origin', saved.origin.label);
+      if (saved.origin?.coords) {
+        url.searchParams.set('lat', Number(saved.origin.coords.lat).toFixed(6));
+        url.searchParams.set('lng', Number(saved.origin.coords.lng).toFixed(6));
+      }
+      if (saved.departureTime) url.searchParams.set('time', saved.departureTime);
+      const copied = await copyTextToClipboard(url.toString());
+      copyBtn.textContent = copied ? 'Copied!' : 'Copy Link';
+      window.setTimeout(() => {
+        copyBtn.textContent = 'Copy Link';
+      }, 2000);
+    });
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'itinerary-action-btn';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.addEventListener('click', () => {
+      const remaining = readSavedRoutes().filter((entry) => entry.id !== saved.id);
+      writeSavedRoutes(remaining);
+      renderSavedRoutes();
+    });
+
+    actionsRow.appendChild(loadBtn);
+    actionsRow.appendChild(copyBtn);
+    actionsRow.appendChild(deleteBtn);
+
+    li.appendChild(topRow);
+    li.appendChild(metaEl);
+    li.appendChild(originMeta);
+    li.appendChild(actionsRow);
+    fragment.appendChild(li);
+  });
+
+  dom.savedRoutesList.replaceChildren(fragment);
+}
+
+function saveCurrentRoute(customName, routePlan, travelMode) {
+  const orderedIds = routePlan.orderedStores.map((store) => store.id);
+  const entry = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name: customName.trim() || getDefaultCrawlName(routePlan.orderedStores),
+    savedAt: new Date().toISOString(),
+    origin: {
+      label: state.selectedOrigin.label,
+      coords: state.selectedOrigin.coords ? { ...state.selectedOrigin.coords } : null,
+      isCurrentLocation: Boolean(state.selectedOrigin.isCurrentLocation),
+    },
+    travelMode,
+    departureTime: dom.departureTime.value || '',
+    storeIds: orderedIds,
+    totalDurationText: formatDurationMs(routePlan.totalDurationMs),
+    totalDistanceText: formatMiles(routePlan.totalDistanceMeters),
+  };
+
+  const existing = readSavedRoutes();
+  const next = [entry, ...existing].slice(0, 20);
+  const ok = writeSavedRoutes(next);
+  renderSavedRoutes();
+  return ok;
+}
+
+function setSelectedTravelMode(travelMode) {
+  const target = dom.form.querySelector(`input[name="travelMode"][value="${travelMode}"]`);
+  if (target) target.checked = true;
+}
+
+async function loadSavedRoute(saved) {
+  const validIds = new Set(BOOKSTORES.map((s) => s.id));
+  state.selectedStoreIds = (saved.storeIds || []).filter((id) => validIds.has(id));
+  state.stopOrderByStoreId = {};
+
+  if (saved.origin) {
+    setAutocompleteDisplayText(saved.origin.label || '');
+    state.selectedOrigin = {
+      label: saved.origin.label || QUICK_START_LOCATIONS[0].label,
+      coords: saved.origin.coords ? { ...saved.origin.coords } : null,
+      isCurrentLocation: Boolean(saved.origin.isCurrentLocation),
+    };
+  }
+
+  setSelectedTravelMode(saved.travelMode || 'DRIVING');
+  dom.departureTime.value = saved.departureTime || '';
+  updateOriginReadout();
+  renderQuickStartButtons();
+  updateUseLocationButton();
+  renderStoreList();
+  refreshMarkers();
+  clearNotice();
+
+  if (state.map && state.selectedStoreIds.length > 0) {
+    await calculateRoute();
+  }
+}
+
+function applyRouteParamsFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const stopsRaw = params.get('stops');
+  if (!stopsRaw) return { shouldAutoRoute: false, hasCustomOrigin: false };
+
+  const validIds = new Set(BOOKSTORES.map((s) => s.id));
+  const parsedStops = stopsRaw
+    .split(',')
+    .map((id) => id.trim())
+    .filter((id) => validIds.has(id));
+
+  if (parsedStops.length === 0) {
+    return { shouldAutoRoute: false, hasCustomOrigin: false };
+  }
+
+  state.selectedStoreIds = [...new Set(parsedStops)];
+
+  const mode = params.get('mode');
+  if (mode === 'DRIVING' || mode === 'TRANSIT' || mode === 'BICYCLING') {
+    setSelectedTravelMode(mode);
+  }
+
+  const time = params.get('time');
+  if (time) {
+    dom.departureTime.value = time;
+  }
+
+  const originLabel = params.get('origin');
+  const lat = Number(params.get('lat'));
+  const lng = Number(params.get('lng'));
+  const hasCoords = Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0);
+  const hasCustomOrigin = Boolean(originLabel || hasCoords);
+
+  if (hasCustomOrigin) {
+    state.selectedOrigin = {
+      label: originLabel || `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+      coords: hasCoords ? { lat, lng } : null,
+      isCurrentLocation: false,
+    };
+  }
+
+  return { shouldAutoRoute: true, hasCustomOrigin };
 }
 
 function renderItinerary(routePlan, travelMode) {
@@ -688,9 +1211,171 @@ function renderItinerary(routePlan, travelMode) {
     stopList.appendChild(li);
   });
 
+  const actionsBar = document.createElement('div');
+  actionsBar.className = 'itinerary-actions';
+
+  const feedbackEl = document.createElement('p');
+  feedbackEl.className = 'action-feedback';
+  feedbackEl.hidden = true;
+
+  const shareFallbackInput = document.createElement('input');
+  shareFallbackInput.type = 'text';
+  shareFallbackInput.readOnly = true;
+  shareFallbackInput.className = 'text-input share-fallback-input';
+  shareFallbackInput.hidden = true;
+  shareFallbackInput.setAttribute('aria-label', 'Shareable route URL');
+  shareFallbackInput.addEventListener('focus', () => shareFallbackInput.select());
+
+  const saveFormRow = document.createElement('div');
+  saveFormRow.className = 'save-route-row';
+  saveFormRow.hidden = true;
+
+  const saveNameInput = document.createElement('input');
+  saveNameInput.type = 'text';
+  saveNameInput.className = 'text-input save-route-input';
+  saveNameInput.placeholder = 'Name this crawl...';
+  saveNameInput.value = getDefaultCrawlName(routePlan.orderedStores);
+  saveNameInput.setAttribute('aria-label', 'Crawl name');
+
+  const saveConfirmBtn = document.createElement('button');
+  saveConfirmBtn.type = 'button';
+  saveConfirmBtn.className = 'save-route-confirm-btn';
+  saveConfirmBtn.textContent = 'Save';
+
+  const commitSave = () => {
+    const savedOk = saveCurrentRoute(saveNameInput.value, routePlan, travelMode);
+    saveFormRow.hidden = true;
+    feedbackEl.hidden = false;
+    feedbackEl.textContent = savedOk
+      ? 'Crawl saved to your browser under Saved Crawls.'
+      : 'Unable to save in this browser context (storage may be blocked).';
+  };
+
+  saveConfirmBtn.addEventListener('click', commitSave);
+  saveNameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commitSave();
+    }
+  });
+
+  saveFormRow.appendChild(saveNameInput);
+  saveFormRow.appendChild(saveConfirmBtn);
+
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.className = 'itinerary-action-btn is-primary-action';
+  saveBtn.innerHTML = `
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+      <polyline points="17 21 17 13 7 13 7 21"></polyline>
+      <polyline points="7 3 7 8 15 8"></polyline>
+    </svg>
+    <span>Save</span>
+  `;
+  saveBtn.addEventListener('click', () => {
+    saveFormRow.hidden = !saveFormRow.hidden;
+    feedbackEl.hidden = true;
+    shareFallbackInput.hidden = true;
+    if (!saveFormRow.hidden) {
+      saveNameInput.focus();
+      saveNameInput.select();
+    }
+  });
+
+  const downloadBtn = document.createElement('button');
+  downloadBtn.type = 'button';
+  downloadBtn.className = 'itinerary-action-btn';
+  downloadBtn.innerHTML = `
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+      <polyline points="7 10 12 15 17 10"></polyline>
+      <line x1="12" y1="15" x2="12" y2="3"></line>
+    </svg>
+    <span>Download (.txt)</span>
+  `;
+  downloadBtn.addEventListener('click', () => {
+    downloadItineraryText(routePlan, travelMode);
+    feedbackEl.hidden = false;
+    feedbackEl.textContent = 'Downloaded itinerary text file.';
+  });
+
+  const shareBtn = document.createElement('button');
+  shareBtn.type = 'button';
+  shareBtn.className = 'itinerary-action-btn';
+  shareBtn.innerHTML = `
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="18" cy="5" r="3"></circle>
+      <circle cx="6" cy="12" r="3"></circle>
+      <circle cx="18" cy="19" r="3"></circle>
+      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+    </svg>
+    <span>Share Link</span>
+  `;
+  shareBtn.addEventListener('click', async () => {
+    const shareUrl = buildShareableRouteUrl(
+      routePlan.orderedStores.map((s) => s.id),
+      travelMode
+    );
+    saveFormRow.hidden = true;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Atlanta Indie Bookshop Crawl Route',
+          text: `Bookshop crawl route (${routePlan.orderedStores.length} stops · ${formatDurationMs(routePlan.totalDurationMs)})`,
+          url: shareUrl,
+        });
+        feedbackEl.hidden = false;
+        feedbackEl.textContent = 'Route link shared.';
+        shareFallbackInput.hidden = true;
+        return;
+      } catch (err) {
+        if (err?.name === 'AbortError') return;
+      }
+    }
+
+    const copied = await copyTextToClipboard(shareUrl);
+    feedbackEl.hidden = false;
+    if (copied) {
+      feedbackEl.textContent = 'Shareable route link copied to clipboard.';
+      shareFallbackInput.hidden = true;
+    } else {
+      feedbackEl.textContent = 'Copy this shareable route link:';
+      shareFallbackInput.value = shareUrl;
+      shareFallbackInput.hidden = false;
+      shareFallbackInput.focus();
+      shareFallbackInput.select();
+    }
+  });
+
+  const mapsLink = document.createElement('a');
+  mapsLink.className = 'itinerary-action-btn';
+  mapsLink.href = buildGoogleMapsDirectionsUrl(routePlan.orderedStores, travelMode);
+  mapsLink.target = '_blank';
+  mapsLink.rel = 'noopener noreferrer';
+  mapsLink.innerHTML = `
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+      <polyline points="15 3 21 3 21 9"></polyline>
+      <line x1="10" y1="14" x2="21" y2="3"></line>
+    </svg>
+    <span>Google Maps</span>
+  `;
+
+  actionsBar.appendChild(saveBtn);
+  actionsBar.appendChild(downloadBtn);
+  actionsBar.appendChild(shareBtn);
+  actionsBar.appendChild(mapsLink);
+
   summary.appendChild(heading);
   summary.appendChild(metrics);
   summary.appendChild(stopList);
+  summary.appendChild(actionsBar);
+  summary.appendChild(saveFormRow);
+  summary.appendChild(feedbackEl);
+  summary.appendChild(shareFallbackInput);
   fragment.appendChild(summary);
 
   const legsWrapper = document.createElement('div');
@@ -749,10 +1434,11 @@ function renderItinerary(routePlan, travelMode) {
 }
 
 async function calculateRoute(event) {
-  event.preventDefault();
+  if (event) event.preventDefault();
   clearNotice();
 
-  const selectedStores = BOOKSTORES.filter((store) => state.selectedStoreIds.includes(store.id));
+  const storeById = new Map(BOOKSTORES.map((store) => [store.id, store]));
+  const selectedStores = state.selectedStoreIds.map((id) => storeById.get(id)).filter(Boolean);
   if (selectedStores.length === 0) {
     showNotice('Select at least one independent bookstore to plan your crawl.', true);
     return;
@@ -815,6 +1501,12 @@ async function calculateRoute(event) {
 function attachStaticListeners() {
   dom.form.addEventListener('submit', calculateRoute);
 
+  if (dom.useMyLocationBtn) {
+    dom.useMyLocationBtn.addEventListener('click', () => {
+      requestCurrentLocation({ silentIfBlocked: false });
+    });
+  }
+
   if (dom.storeFilter) {
     dom.storeFilter.addEventListener('input', () => {
       state.filterQuery = dom.storeFilter.value;
@@ -854,7 +1546,9 @@ function attachStaticListeners() {
 }
 
 async function initApp() {
+  const { shouldAutoRoute, hasCustomOrigin } = applyRouteParamsFromUrl();
   renderStoreList();
+  renderSavedRoutes();
   attachStaticListeners();
 
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
@@ -905,6 +1599,20 @@ async function initApp() {
     state.infoWindow = new InfoWindow();
     renderStoreMarkers();
     initAutocomplete();
+
+    if (shouldAutoRoute) {
+      await calculateRoute();
+    } else if (!hasCustomOrigin && navigator.permissions?.query) {
+      // Auto-detect current location on load only if permission was already granted.
+      navigator.permissions
+        .query({ name: 'geolocation' })
+        .then((status) => {
+          if (status.state === 'granted') {
+            requestCurrentLocation({ silentIfBlocked: true });
+          }
+        })
+        .catch(() => {});
+    }
   } catch (error) {
     console.error('Failed to load Google Maps Platform libraries:', error);
     showNotice(

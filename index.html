@@ -41,7 +41,16 @@
 
           <form id="crawl-form" class="planner-form" novalidate>
             <div class="form-group">
-              <span id="start-location-label" class="field-label">Start Location</span>
+              <div class="store-list-header">
+                <span id="start-location-label" class="field-label">Start Location</span>
+                <button type="button" id="use-my-location-btn" class="text-action-btn location-action-btn">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="4"></circle>
+                    <path d="M12 2v3m0 14v3M2 12h3m14 0h3"></path>
+                  </svg>
+                  <span>Use My Location</span>
+                </button>
+              </div>
               <div id="start-autocomplete-container" class="autocomplete-shell"></div>
               <div class="quick-picks" aria-label="Quick start landmarks">
                 <span class="quick-picks-label">Quick start:</span>
@@ -116,6 +125,19 @@
           aria-live="polite"
           aria-label="Route Itinerary"
         ></section>
+
+        <section
+          id="saved-routes-section"
+          class="saved-routes-section"
+          aria-labelledby="saved-routes-heading"
+          hidden
+        >
+          <div class="section-header-row">
+            <h2 id="saved-routes-heading" class="section-heading">Saved Crawls</h2>
+            <span id="saved-routes-count" class="saved-routes-count"></span>
+          </div>
+          <ul id="saved-routes-list" class="saved-routes-list" aria-label="Saved bookstore crawls"></ul>
+        </section>
       </aside>
 
       <main class="map-pane" aria-label="Interactive Bookstore Map">

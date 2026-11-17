@@ -31,7 +31,7 @@ export const BOOKSTORES = [
     website: 'https://braveandkindbookshop.com',
     instagram: '@braveandkindbooks',
     coords: { lat: 33.766425, lng: -84.305705 },
-    defaultSelected: true,
+    defaultSelected: false,
   },
   {
     id: 'charis-books',
@@ -41,7 +41,7 @@ export const BOOKSTORES = [
     website: 'https://charisbooksandmore.com',
     instagram: '@charisbooksandmore',
     coords: { lat: 33.768465, lng: -84.292515 },
-    defaultSelected: true,
+    defaultSelected: false,
   },
   {
     id: 'little-shop-of-stories',
@@ -51,7 +51,7 @@ export const BOOKSTORES = [
     website: 'https://littleshopofstories.com',
     instagram: '@littleshopofstories',
     coords: { lat: 33.775128, lng: -84.29584 },
-    defaultSelected: true,
+    defaultSelected: false,
   },
   {
     id: 'a-cappella-books',

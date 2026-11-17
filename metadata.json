@@ -1,6 +1,6 @@
 {
   "name": "Atlanta Indie Bookshop Crawl",
   "description": "Interactive map and route optimizer for independent bookstores across Atlanta and Decatur.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["geolocation"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
