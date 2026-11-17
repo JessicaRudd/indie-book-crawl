@@ -109,13 +109,23 @@
                 placeholder="Filter 36 shops by name or city (e.g. Decatur, Marietta)..."
                 aria-label="Filter bookstores by name or city"
               />
+              <p id="store-list-instructions" class="sr-only">
+                Use Up and Down Arrow keys or Home and End to move through bookshops, Left and Right Arrow keys to switch between the checkbox and View button, and Space or Enter to toggle selection.
+              </p>
               <ul
                 id="store-list"
                 class="store-list"
                 aria-label="Participating independent bookstores"
-                aria-describedby="store-selection-error"
+                aria-describedby="store-list-instructions store-selection-error"
               ></ul>
               <p id="store-selection-error" class="field-error" aria-live="polite" hidden></p>
+              <div
+                id="store-selection-live"
+                class="sr-only"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+              ></div>
             </div>
 
             <div id="route-notice" class="notice-banner" role="alert" hidden></div>
@@ -153,7 +163,21 @@
       </aside>
 
       <main class="map-pane" aria-label="Interactive Bookstore Map">
-        <div id="map" class="map-canvas"></div>
+        <p id="map-instructions" class="sr-only">
+          Interactive map of participating Atlanta independent bookstores. Tab to any bookstore marker and press Enter or Space to inspect details and add or remove it from your crawl.
+        </p>
+        <div
+          id="map"
+          class="map-canvas"
+          aria-describedby="map-instructions"
+        ></div>
+        <div
+          id="map-live-region"
+          class="sr-only"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        ></div>
       </main>
     </div>
 

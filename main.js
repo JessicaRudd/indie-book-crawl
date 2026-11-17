@@ -49,13 +49,66 @@ const dom = {
   savedRoutesCount: document.getElementById('saved-routes-count'),
   savedRoutesList: document.getElementById('saved-routes-list'),
   mapContainer: document.getElementById('map'),
+  storeSelectionLive: document.getElementById('store-selection-live'),
+  mapLiveRegion: document.getElementById('map-live-region'),
 };
 
-function createBookPinElement(store, isSelected, stopOrder) {
+function announceLiveRegion(element, message) {
+  if (!element || !message) return;
+  element.textContent = '';
+  window.requestAnimationFrame(() => {
+    element.textContent = message;
+  });
+}
+
+function announceChecklistStatus(message) {
+  announceLiveRegion(dom.storeSelectionLive, message);
+}
+
+function announceMapStatus(message) {
+  announceLiveRegion(dom.mapLiveRegion, message);
+}
+
+function buildMarkerTitle(store, isSelected, stopOrder) {
+  if (stopOrder) {
+    return `Stop ${stopOrder}: ${store.name} (${store.neighborhood})`;
+  }
+  if (isSelected) {
+    return `${store.name} (${store.neighborhood}) — Selected`;
+  }
+  return `${store.name} (${store.neighborhood})`;
+}
+
+function buildMarkerAriaLabel(store, isSelected, stopOrder) {
+  const parts = [];
+  if (stopOrder) {
+    parts.push(`Stop ${stopOrder}`);
+  }
+  parts.push(`${store.name} in ${store.neighborhood}`);
+  parts.push(isSelected ? 'selected in crawl' : 'not selected');
+  parts.push('Press Enter or Space for bookstore details');
+  return `${parts.join(', ')}.`;
+}
+
+function createBookPinElement(store, isSelected, stopOrder, onActivate) {
   const pin = document.createElement('div');
   pin.className = `book-marker${isSelected ? ' is-selected' : ''}`;
+  pin.tabIndex = 0;
+  pin.dataset.storeId = store.id;
   pin.setAttribute('role', 'button');
-  pin.setAttribute('aria-label', store.name);
+  pin.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+  pin.setAttribute('aria-describedby', 'map-live-region');
+  pin.setAttribute('aria-label', buildMarkerAriaLabel(store, isSelected, stopOrder));
+
+  pin.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      event.stopPropagation();
+      if (onActivate) {
+        onActivate();
+      }
+    }
+  });
 
   const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   icon.setAttribute('width', '14');
@@ -83,9 +136,11 @@ function createBookPinElement(store, isSelected, stopOrder) {
   return pin;
 }
 
-function createOriginPinElement() {
+function createOriginPinElement(originLabel = state.selectedOrigin.label) {
   const pin = document.createElement('div');
   pin.className = 'origin-marker';
+  pin.setAttribute('role', 'img');
+  pin.setAttribute('aria-label', `Start location marker: ${originLabel || 'Crawl start'}`);
   pin.textContent = 'Start';
   return pin;
 }
@@ -150,7 +205,8 @@ function updateOriginMarkerOnMap(panToOrigin = false) {
     position: state.selectedOrigin.coords,
     title: `Start: ${state.selectedOrigin.label}`,
   });
-  state.originMarker.append(createOriginPinElement());
+  state.originMarker.append(createOriginPinElement(state.selectedOrigin.label));
+  announceMapStatus(`Start location marker placed on map at ${state.selectedOrigin.label}.`);
 
   if (panToOrigin) {
     state.map.panTo(state.selectedOrigin.coords);
@@ -280,7 +336,7 @@ function getFilteredStores() {
 }
 
 function filterStoreList() {
-  if (!dom.storeList) return;
+  if (!dom.storeList) return 0;
   const query = (dom.storeFilter?.value ?? state.filterQuery).trim().toLowerCase();
   state.filterQuery = dom.storeFilter ? dom.storeFilter.value : state.filterQuery;
 
@@ -298,6 +354,23 @@ function filterStoreList() {
   if (emptyRow) {
     emptyRow.hidden = visibleCount > 0;
   }
+
+  return visibleCount;
+}
+
+function getActiveStoreControlState() {
+  const activeEl = document.activeElement;
+  if (!activeEl || !dom.storeList || !dom.storeList.contains(activeEl)) {
+    return null;
+  }
+  const activeItem = activeEl.closest('.store-item');
+  if (!activeItem?.dataset.storeId) return null;
+  return {
+    storeId: activeItem.dataset.storeId,
+    controlSelector: activeEl.classList.contains('store-focus-btn')
+      ? '.store-focus-btn'
+      : '.store-checkbox',
+  };
 }
 
 function renderStoreList() {
@@ -305,6 +378,7 @@ function renderStoreList() {
     dom.selectedCount.textContent = String(state.selectedStoreIds.length);
   }
 
+  const activeControl = getActiveStoreControlState();
   const fragment = document.createDocumentFragment();
 
   BOOKSTORES.forEach((store) => {
@@ -327,6 +401,10 @@ function renderStoreList() {
     checkbox.id = `store-${store.id}`;
     checkbox.className = 'store-checkbox';
     checkbox.checked = isSelected;
+    checkbox.setAttribute(
+      'aria-label',
+      `${store.name}, ${store.neighborhood}${stopOrder ? `, Stop ${stopOrder}` : ''}`
+    );
     checkbox.addEventListener('change', () => toggleStoreSelection(store.id, checkbox.checked));
 
     const details = document.createElement('div');
@@ -382,15 +460,36 @@ function renderStoreList() {
 
   dom.storeList.replaceChildren(fragment);
   filterStoreList();
+
+  if (activeControl) {
+    const targetRow = dom.storeList.querySelector(
+      `.store-item[data-store-id="${activeControl.storeId}"]:not([hidden])`
+    );
+    const targetEl = targetRow?.querySelector(activeControl.controlSelector);
+    if (targetEl) {
+      targetEl.focus({ preventScroll: true });
+    }
+  }
 }
 
 function refreshMarkers() {
+  const activeMarkerStoreId = document.activeElement?.classList?.contains('book-marker')
+    ? document.activeElement.dataset.storeId
+    : null;
+
   BOOKSTORES.forEach((store) => {
     const marker = state.storeMarkers.get(store.id);
     if (!marker) return;
     const isSelected = state.selectedStoreIds.includes(store.id);
     const stopOrder = state.stopOrderByStoreId[store.id];
-    marker.replaceChildren(createBookPinElement(store, isSelected, stopOrder));
+    marker.title = buildMarkerTitle(store, isSelected, stopOrder);
+    const pin = createBookPinElement(store, isSelected, stopOrder, () =>
+      openStoreInfoWindow(store, { pan: true })
+    );
+    marker.replaceChildren(pin);
+    if (activeMarkerStoreId === store.id) {
+      pin.focus({ preventScroll: true });
+    }
   });
 }
 
@@ -406,6 +505,14 @@ function toggleStoreSelection(storeId, shouldInclude) {
   }
   renderStoreList();
   refreshMarkers();
+
+  const store = BOOKSTORES.find((entry) => entry.id === storeId);
+  if (store) {
+    const actionLabel = shouldInclude ? 'added to' : 'removed from';
+    const message = `${store.name} ${actionLabel} crawl. ${state.selectedStoreIds.length} of ${BOOKSTORES.length} bookshops selected.`;
+    announceChecklistStatus(message);
+    announceMapStatus(`Map marker updated: ${message}`);
+  }
 }
 
 function buildInfoWindowContent(store) {
@@ -461,24 +568,40 @@ function buildInfoWindowContent(store) {
   toggleBtn.textContent = isSelected ? 'Remove from Crawl' : 'Add to Crawl';
   toggleBtn.addEventListener('click', () => {
     toggleStoreSelection(store.id, !isSelected);
-    state.infoWindow.setContent(buildInfoWindowContent(store));
+    const updatedCard = buildInfoWindowContent(store);
+    state.infoWindow.setContent(updatedCard);
+    updatedCard.querySelector('.info-window-btn')?.focus();
   });
 
   card.appendChild(toggleBtn);
   return card;
 }
 
-function focusStoreOnMap(store) {
+function openStoreInfoWindow(store, { pan = false } = {}) {
   if (!state.map || !state.infoWindow) return;
   const marker = state.storeMarkers.get(store.id);
-  state.map.panTo(store.coords);
-  if ((state.map.getZoom() ?? 12) < 13) {
-    state.map.setZoom(14);
+  if (pan) {
+    state.map.panTo(store.coords);
+    if ((state.map.getZoom() ?? 12) < 13) {
+      state.map.setZoom(14);
+    }
   }
   if (marker) {
     state.infoWindow.setContent(buildInfoWindowContent(store));
     state.infoWindow.open({ anchor: marker, map: state.map });
   }
+
+  const isSelected = state.selectedStoreIds.includes(store.id);
+  const stopOrder = state.stopOrderByStoreId[store.id];
+  const stopPhrase = stopOrder ? ` Stop ${stopOrder} on route.` : '';
+  const selectionPhrase = isSelected ? ' Included in crawl.' : ' Not selected.';
+  announceMapStatus(
+    `Map focused on ${store.name}, ${store.neighborhood}, ${store.address}.${stopPhrase}${selectionPhrase}`
+  );
+}
+
+function focusStoreOnMap(store) {
+  openStoreInfoWindow(store, { pan: true });
 }
 
 function renderStoreMarkers() {
@@ -489,18 +612,25 @@ function renderStoreMarkers() {
     const marker = new AdvancedMarkerElement({
       map: state.map,
       position: store.coords,
-      title: store.name,
+      title: buildMarkerTitle(store, isSelected, null),
     });
-    marker.append(createBookPinElement(store, isSelected, null));
+    marker.append(
+      createBookPinElement(store, isSelected, null, () =>
+        openStoreInfoWindow(store, { pan: true })
+      )
+    );
 
     // Standard 'click' on AdvancedMarkerElement works across all API channels including weekly.
     marker.addListener('click', () => {
-      state.infoWindow.setContent(buildInfoWindowContent(store));
-      state.infoWindow.open({ anchor: marker, map: state.map });
+      openStoreInfoWindow(store);
     });
 
     state.storeMarkers.set(store.id, marker);
   });
+
+  announceMapStatus(
+    `Map ready with ${BOOKSTORES.length} independent bookstore markers across Atlanta and Decatur.`
+  );
 }
 
 function initAutocomplete() {
@@ -901,7 +1031,7 @@ function renderRoute(routePlan, travelMode) {
       position: state.selectedOrigin.coords,
       title: `Start: ${state.selectedOrigin.label}`,
     });
-    state.originMarker.append(createOriginPinElement());
+    state.originMarker.append(createOriginPinElement(state.selectedOrigin.label));
   }
 
   const orderMap = {};
@@ -928,6 +1058,13 @@ function renderRoute(routePlan, travelMode) {
   state.lastTravelMode = travelMode;
   renderItinerary(routePlan, travelMode);
   dom.resetBtn.hidden = false;
+
+  const stopCount = routePlan.orderedStores.length;
+  announceMapStatus(
+    `Route mapped across ${stopCount} ${stopCount === 1 ? 'stop' : 'stops'}: ${formatDurationMs(
+      routePlan.totalDurationMs
+    )}, ${formatMiles(routePlan.totalDistanceMeters)}. Numbered map markers 1 through ${stopCount} updated.`
+  );
 }
 
 function readSavedRoutes() {
@@ -1662,12 +1799,104 @@ function attachStaticListeners() {
   }
 
   if (dom.storeFilter) {
-    dom.storeFilter.addEventListener('input', filterStoreList);
-    dom.storeFilter.addEventListener('search', filterStoreList);
+    let filterAnnounceTimer = null;
+    const handleFilterChange = ({ announceImmediately = false } = {}) => {
+      const visibleCount = filterStoreList();
+      window.clearTimeout(filterAnnounceTimer);
+      const announce = () => {
+        announceChecklistStatus(
+          visibleCount === 0
+            ? 'No participating bookstores match your filter.'
+            : `Showing ${visibleCount} of ${BOOKSTORES.length} participating bookstores.`
+        );
+      };
+      if (announceImmediately) {
+        announce();
+      } else {
+        filterAnnounceTimer = window.setTimeout(announce, 350);
+      }
+    };
+
+    dom.storeFilter.addEventListener('input', () => handleFilterChange());
+    dom.storeFilter.addEventListener('search', () => handleFilterChange({ announceImmediately: true }));
     dom.storeFilter.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && dom.storeFilter.value) {
         dom.storeFilter.value = '';
-        filterStoreList();
+        handleFilterChange({ announceImmediately: true });
+      } else if (
+        event.key === 'ArrowDown' &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey
+      ) {
+        const firstCheckbox = dom.storeList?.querySelector(
+          '.store-item:not([hidden]) .store-checkbox'
+        );
+        if (firstCheckbox) {
+          event.preventDefault();
+          firstCheckbox.focus();
+        }
+      }
+    });
+  }
+
+  if (dom.storeList) {
+    dom.storeList.addEventListener('keydown', (event) => {
+      const target = event.target;
+      const item = target?.closest?.('.store-item');
+      if (!item || !dom.storeList.contains(item)) return;
+
+      const isCheckbox = target.classList.contains('store-checkbox');
+      const isFocusBtn = target.classList.contains('store-focus-btn');
+      if (!isCheckbox && !isFocusBtn) return;
+
+      if (event.key === 'Enter' && isCheckbox) {
+        event.preventDefault();
+        const storeId = item.dataset.storeId;
+        if (storeId) {
+          target.checked = !target.checked;
+          toggleStoreSelection(storeId, target.checked);
+        }
+        return;
+      }
+
+      if (event.key === 'ArrowRight' && isCheckbox) {
+        event.preventDefault();
+        item.querySelector('.store-focus-btn')?.focus();
+        return;
+      }
+
+      if (event.key === 'ArrowLeft' && isFocusBtn) {
+        event.preventDefault();
+        item.querySelector('.store-checkbox')?.focus();
+        return;
+      }
+
+      const visibleItems = Array.from(
+        dom.storeList.querySelectorAll('.store-item:not([hidden])')
+      );
+      const currentIndex = visibleItems.indexOf(item);
+      if (currentIndex === -1) return;
+
+      let nextIndex = null;
+      if (event.key === 'ArrowDown') {
+        nextIndex = Math.min(currentIndex + 1, visibleItems.length - 1);
+      } else if (event.key === 'ArrowUp') {
+        nextIndex = Math.max(currentIndex - 1, 0);
+      } else if (event.key === 'Home') {
+        nextIndex = 0;
+      } else if (event.key === 'End') {
+        nextIndex = visibleItems.length - 1;
+      }
+
+      if (nextIndex !== null) {
+        event.preventDefault();
+        const selector = isFocusBtn ? '.store-focus-btn' : '.store-checkbox';
+        const nextControl = visibleItems[nextIndex]?.querySelector(selector);
+        if (nextControl) {
+          nextControl.focus();
+          visibleItems[nextIndex].scrollIntoView({ block: 'nearest' });
+        }
       }
     });
   }
@@ -1684,6 +1913,10 @@ function attachStaticListeners() {
     }
     renderStoreList();
     refreshMarkers();
+
+    const msg = `Selected ${visibleIds.length} visible bookshops. ${state.selectedStoreIds.length} of ${BOOKSTORES.length} total selected.`;
+    announceChecklistStatus(msg);
+    announceMapStatus(`Map markers updated: ${state.selectedStoreIds.length} bookshops selected.`);
   });
 
   dom.clearStoresBtn.addEventListener('click', () => {
@@ -1693,6 +1926,8 @@ function attachStaticListeners() {
     dom.resetBtn.hidden = true;
     clearValidationErrors();
     clearNotice();
+    announceChecklistStatus('Cleared all selected bookstores. 0 of 36 selected.');
+    announceMapStatus('All bookstore selections and route markers cleared from the map.');
   });
 
   dom.resetBtn.addEventListener('click', () => {
@@ -1705,6 +1940,7 @@ function attachStaticListeners() {
       state.map.panTo(ATLANTA_CENTER);
       state.map.setZoom(10);
     }
+    announceMapStatus('Route and numbered stop markers cleared from the map.');
   });
 }
 
@@ -1760,6 +1996,9 @@ async function initApp() {
     });
 
     state.infoWindow = new InfoWindow();
+    state.infoWindow.addListener('closeclick', () => {
+      announceMapStatus('Closed bookstore marker details.');
+    });
     renderStoreMarkers();
     initAutocomplete();
 
