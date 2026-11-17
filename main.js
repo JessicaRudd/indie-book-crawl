@@ -18,6 +18,7 @@ const state = {
   selectedStoreIds: [],
   expandedStoreIds: new Set(),
   filterQuery: '',
+  officialCrawlOnly: false,
   stopOrderByStoreId: {},
   storeMarkers: new Map(),
   originMarker: null,
@@ -37,7 +38,10 @@ const dom = {
   setNowBtn: document.getElementById('set-now-btn'),
   departureTimeError: document.getElementById('departure-time-error'),
   selectedCount: document.getElementById('selected-count'),
+  openStoreCount: document.getElementById('open-store-count'),
+  officialCrawlCount: document.getElementById('official-crawl-count'),
   storeFilter: document.getElementById('store-filter'),
+  officialCrawlOnly: document.getElementById('official-crawl-only'),
   storeList: document.getElementById('store-list'),
   storeSelectionError: document.getElementById('store-selection-error'),
   selectAllBtn: document.getElementById('select-all-btn'),
@@ -70,7 +74,18 @@ function announceMapStatus(message) {
   announceLiveRegion(dom.mapLiveRegion, message);
 }
 
+function isStoreOpen(store) {
+  return store?.isOpen !== false;
+}
+
+function getOpenBookstores() {
+  return BOOKSTORES.filter(isStoreOpen);
+}
+
 function buildMarkerTitle(store, isSelected, stopOrder) {
+  if (!isStoreOpen(store)) {
+    return `COMING SOON! ${store.name} (${store.neighborhood})`;
+  }
   if (stopOrder) {
     return `Stop ${stopOrder}: ${store.name} (${store.neighborhood})`;
   }
@@ -82,22 +97,32 @@ function buildMarkerTitle(store, isSelected, stopOrder) {
 
 function buildMarkerAriaLabel(store, isSelected, stopOrder) {
   const parts = [];
-  if (stopOrder) {
+  if (!isStoreOpen(store)) {
+    parts.push('Coming soon');
+  } else if (stopOrder) {
     parts.push(`Stop ${stopOrder}`);
   }
   parts.push(`${store.name} in ${store.neighborhood}`);
-  parts.push(isSelected ? 'selected in crawl' : 'not selected');
+  if (store.isOfficialCrawl) {
+    parts.push('official crawl stop');
+  }
+  if (!isStoreOpen(store)) {
+    parts.push('not yet open for route planning');
+  } else {
+    parts.push(isSelected ? 'selected in crawl' : 'not selected');
+  }
   parts.push('Press Enter or Space for bookstore details');
   return `${parts.join(', ')}.`;
 }
 
 function createBookPinElement(store, isSelected, stopOrder, onActivate) {
+  const open = isStoreOpen(store);
   const pin = document.createElement('div');
-  pin.className = `book-marker${isSelected ? ' is-selected' : ''}`;
+  pin.className = `book-marker${!open ? ' is-coming-soon' : isSelected ? ' is-selected' : ''}`;
   pin.tabIndex = 0;
   pin.dataset.storeId = store.id;
   pin.setAttribute('role', 'button');
-  pin.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+  pin.setAttribute('aria-pressed', open && isSelected ? 'true' : 'false');
   pin.setAttribute('aria-describedby', 'map-live-region');
   pin.setAttribute('aria-label', buildMarkerAriaLabel(store, isSelected, stopOrder));
 
@@ -328,6 +353,8 @@ function buildStoreSearchText(store) {
     store.instagram,
     store.hours,
     store.description,
+    isStoreOpen(store) ? 'open' : 'coming soon',
+    store.isOfficialCrawl ? 'official crawl' : 'indie bookshop',
   ]
     .filter(Boolean)
     .join(' ')
@@ -345,23 +372,26 @@ function storeMatchesTerms(searchText, rawQuery) {
 }
 
 function getFilteredStores() {
-  if (!state.filterQuery.trim()) return BOOKSTORES;
-  return BOOKSTORES.filter((store) =>
-    storeMatchesTerms(buildStoreSearchText(store), state.filterQuery)
-  );
+  return BOOKSTORES.filter((store) => {
+    if (state.officialCrawlOnly && !store.isOfficialCrawl) return false;
+    return storeMatchesTerms(buildStoreSearchText(store), state.filterQuery);
+  });
 }
 
 function filterStoreList() {
   if (!dom.storeList) return 0;
   const rawQuery = dom.storeFilter?.value ?? state.filterQuery;
   state.filterQuery = rawQuery;
+  state.officialCrawlOnly = Boolean(dom.officialCrawlOnly?.checked);
 
   const items = dom.storeList.querySelectorAll('.store-item');
   let visibleCount = 0;
 
   items.forEach((item) => {
     const searchText = item.dataset.search || '';
-    const matches = storeMatchesTerms(searchText, rawQuery);
+    const matchesCrawlFilter =
+      !state.officialCrawlOnly || item.dataset.officialCrawl === 'true';
+    const matches = matchesCrawlFilter && storeMatchesTerms(searchText, rawQuery);
     item.hidden = !matches;
     if (matches) visibleCount += 1;
   });
@@ -426,18 +456,29 @@ function renderStoreList() {
   if (dom.selectedCount) {
     dom.selectedCount.textContent = String(state.selectedStoreIds.length);
   }
+  if (dom.openStoreCount) {
+    dom.openStoreCount.textContent = String(getOpenBookstores().length);
+  }
+  if (dom.officialCrawlCount) {
+    dom.officialCrawlCount.textContent = String(
+      BOOKSTORES.filter((store) => store.isOfficialCrawl).length
+    );
+  }
 
   const activeControl = getActiveStoreControlState();
   const fragment = document.createDocumentFragment();
 
   BOOKSTORES.forEach((store) => {
-    const isSelected = state.selectedStoreIds.includes(store.id);
+    const open = isStoreOpen(store);
+    const isSelected = open && state.selectedStoreIds.includes(store.id);
     const isExpanded = state.expandedStoreIds.has(store.id);
     const stopOrder = state.stopOrderByStoreId[store.id];
 
     const li = document.createElement('li');
-    li.className = 'store-item';
+    li.className = `store-item${!open ? ' is-coming-soon' : ''}`;
     li.dataset.storeId = store.id;
+    li.dataset.officialCrawl = store.isOfficialCrawl ? 'true' : 'false';
+    li.dataset.isOpen = open ? 'true' : 'false';
     li.dataset.search = buildStoreSearchText(store);
 
     const row = document.createElement('div');
@@ -448,9 +489,14 @@ function renderStoreList() {
     checkbox.id = `store-${store.id}`;
     checkbox.className = 'store-checkbox';
     checkbox.checked = isSelected;
+    checkbox.disabled = !open;
+    if (!open) {
+      checkbox.setAttribute('aria-disabled', 'true');
+      checkbox.title = 'Coming soon — not yet open for route planning';
+    }
     checkbox.setAttribute(
       'aria-label',
-      `${store.name}, ${store.neighborhood}${stopOrder ? `, Stop ${stopOrder}` : ''}`
+      `${store.name}, ${store.neighborhood}${!open ? ', Coming soon, not open for route planning' : stopOrder ? `, Stop ${stopOrder}` : ''}`
     );
     checkbox.addEventListener('change', () => toggleStoreSelection(store.id, checkbox.checked));
 
@@ -466,11 +512,27 @@ function renderStoreList() {
     label.textContent = store.name;
     titleRow.appendChild(label);
 
-    if (stopOrder) {
-      const orderLabel = document.createElement('span');
-      orderLabel.className = 'store-stop-order';
-      orderLabel.textContent = `Stop ${stopOrder}`;
-      titleRow.appendChild(orderLabel);
+    if (!open || store.isOfficialCrawl || stopOrder) {
+      const badges = document.createElement('div');
+      badges.className = 'store-title-badges';
+      if (!open) {
+        const comingSoonBadge = document.createElement('span');
+        comingSoonBadge.className = 'store-status-badge is-coming-soon';
+        comingSoonBadge.textContent = 'COMING SOON!';
+        badges.appendChild(comingSoonBadge);
+      } else if (store.isOfficialCrawl) {
+        const crawlTag = document.createElement('span');
+        crawlTag.className = 'store-crawl-tag';
+        crawlTag.textContent = 'Official Crawl';
+        badges.appendChild(crawlTag);
+      }
+      if (stopOrder) {
+        const orderLabel = document.createElement('span');
+        orderLabel.className = 'store-stop-order';
+        orderLabel.textContent = `Stop ${stopOrder}`;
+        badges.appendChild(orderLabel);
+      }
+      titleRow.appendChild(badges);
     }
 
     const meta = document.createElement('div');
@@ -609,6 +671,18 @@ function refreshMarkers() {
 }
 
 function toggleStoreSelection(storeId, shouldInclude) {
+  const store = BOOKSTORES.find((entry) => entry.id === storeId);
+  if (!store) return;
+
+  if (shouldInclude && !isStoreOpen(store)) {
+    const blockedMsg = `${store.name} is coming soon and cannot be added to route planning yet.`;
+    announceChecklistStatus(blockedMsg);
+    announceMapStatus(blockedMsg);
+    renderStoreList();
+    refreshMarkers();
+    return;
+  }
+
   if (shouldInclude && !state.selectedStoreIds.includes(storeId)) {
     state.selectedStoreIds.push(storeId);
   } else if (!shouldInclude) {
@@ -621,20 +695,31 @@ function toggleStoreSelection(storeId, shouldInclude) {
   renderStoreList();
   refreshMarkers();
 
-  const store = BOOKSTORES.find((entry) => entry.id === storeId);
-  if (store) {
-    const actionLabel = shouldInclude ? 'added to' : 'removed from';
-    const message = `${store.name} ${actionLabel} crawl. ${state.selectedStoreIds.length} of ${BOOKSTORES.length} bookshops selected.`;
-    announceChecklistStatus(message);
-    announceMapStatus(`Map marker updated: ${message}`);
-  }
+  const openCount = getOpenBookstores().length;
+  const actionLabel = shouldInclude ? 'added to' : 'removed from';
+  const message = `${store.name} ${actionLabel} crawl. ${state.selectedStoreIds.length} of ${openCount} open bookshops selected.`;
+  announceChecklistStatus(message);
+  announceMapStatus(`Map marker updated: ${message}`);
 }
 
 function buildInfoWindowContent(store) {
-  const isSelected = state.selectedStoreIds.includes(store.id);
+  const open = isStoreOpen(store);
+  const isSelected = open && state.selectedStoreIds.includes(store.id);
 
   const card = document.createElement('div');
   card.className = 'info-window-card';
+
+  if (!open) {
+    const badge = document.createElement('p');
+    badge.className = 'info-window-badge is-coming-soon';
+    badge.textContent = 'COMING SOON!';
+    card.appendChild(badge);
+  } else if (store.isOfficialCrawl) {
+    const badge = document.createElement('p');
+    badge.className = 'info-window-badge is-official';
+    badge.textContent = 'Official Crawl Stop';
+    card.appendChild(badge);
+  }
 
   const title = document.createElement('h3');
   title.className = 'info-window-title';
@@ -651,6 +736,13 @@ function buildInfoWindowContent(store) {
   card.appendChild(title);
   card.appendChild(meta);
   card.appendChild(address);
+
+  if (store.hours) {
+    const hoursEl = document.createElement('p');
+    hoursEl.className = 'info-window-hours';
+    hoursEl.textContent = store.hours;
+    card.appendChild(hoursEl);
+  }
 
   if (store.website || store.instagram) {
     const links = document.createElement('p');
@@ -677,14 +769,21 @@ function buildInfoWindowContent(store) {
 
   const toggleBtn = document.createElement('button');
   toggleBtn.type = 'button';
-  toggleBtn.className = `info-window-btn${isSelected ? ' is-included' : ''}`;
-  toggleBtn.textContent = isSelected ? 'Remove from Crawl' : 'Add to Crawl';
-  toggleBtn.addEventListener('click', () => {
-    toggleStoreSelection(store.id, !isSelected);
-    const updatedCard = buildInfoWindowContent(store);
-    state.infoWindow.setContent(updatedCard);
-    updatedCard.querySelector('.info-window-btn')?.focus();
-  });
+  if (!open) {
+    toggleBtn.className = 'info-window-btn';
+    toggleBtn.disabled = true;
+    toggleBtn.setAttribute('aria-disabled', 'true');
+    toggleBtn.textContent = 'Coming Soon — Not Open for Routing';
+  } else {
+    toggleBtn.className = `info-window-btn${isSelected ? ' is-included' : ''}`;
+    toggleBtn.textContent = isSelected ? 'Remove from Crawl' : 'Add to Crawl';
+    toggleBtn.addEventListener('click', () => {
+      toggleStoreSelection(store.id, !isSelected);
+      const updatedCard = buildInfoWindowContent(store);
+      state.infoWindow.setContent(updatedCard);
+      updatedCard.querySelector('.info-window-btn')?.focus();
+    });
+  }
 
   card.appendChild(toggleBtn);
   return card;
@@ -704,12 +803,17 @@ function openStoreInfoWindow(store, { pan = false } = {}) {
     state.infoWindow.open({ anchor: marker, map: state.map });
   }
 
-  const isSelected = state.selectedStoreIds.includes(store.id);
+  const open = isStoreOpen(store);
+  const isSelected = open && state.selectedStoreIds.includes(store.id);
   const stopOrder = state.stopOrderByStoreId[store.id];
   const stopPhrase = stopOrder ? ` Stop ${stopOrder} on route.` : '';
-  const selectionPhrase = isSelected ? ' Included in crawl.' : ' Not selected.';
+  const statusPhrase = !open
+    ? ' Coming soon, not yet open for routing.'
+    : isSelected
+      ? ' Included in crawl.'
+      : ' Not selected.';
   announceMapStatus(
-    `Map focused on ${store.name}, ${store.neighborhood}, ${store.address}.${stopPhrase}${selectionPhrase}`
+    `Map focused on ${store.name}, ${store.neighborhood}, ${store.address}.${stopPhrase}${statusPhrase}`
   );
 }
 
@@ -721,7 +825,7 @@ function renderStoreMarkers() {
   const { AdvancedMarkerElement } = state.libs.marker;
 
   BOOKSTORES.forEach((store) => {
-    const isSelected = state.selectedStoreIds.includes(store.id);
+    const isSelected = isStoreOpen(store) && state.selectedStoreIds.includes(store.id);
     const marker = new AdvancedMarkerElement({
       map: state.map,
       position: store.coords,
@@ -741,8 +845,12 @@ function renderStoreMarkers() {
     state.storeMarkers.set(store.id, marker);
   });
 
+  const openCount = getOpenBookstores().length;
+  const comingSoonCount = BOOKSTORES.length - openCount;
+  const comingSoonPhrase =
+    comingSoonCount > 0 ? `, including ${comingSoonCount} coming soon` : '';
   announceMapStatus(
-    `Map ready with ${BOOKSTORES.length} independent bookstore markers across Atlanta and Decatur.`
+    `Map ready with ${BOOKSTORES.length} independent bookstore markers across metro Atlanta${comingSoonPhrase}.`
   );
 }
 
@@ -917,7 +1025,9 @@ function validateCrawlForm() {
   clearValidationErrors();
 
   const storeById = new Map(BOOKSTORES.map((store) => [store.id, store]));
-  const selectedStores = state.selectedStoreIds.map((id) => storeById.get(id)).filter(Boolean);
+  const selectedStores = state.selectedStoreIds
+    .map((id) => storeById.get(id))
+    .filter((store) => store && isStoreOpen(store));
   const originText = state.selectedOrigin.label || state.autocompleteEl?.value?.trim() || '';
   const travelMode = getSelectedTravelMode();
   const departureValidation = validateDepartureDate(travelMode);
@@ -1487,8 +1597,8 @@ function setSelectedTravelMode(travelMode) {
 }
 
 async function loadSavedRoute(saved) {
-  const validIds = new Set(BOOKSTORES.map((s) => s.id));
-  state.selectedStoreIds = (saved.storeIds || []).filter((id) => validIds.has(id));
+  const openIds = new Set(getOpenBookstores().map((s) => s.id));
+  state.selectedStoreIds = (saved.storeIds || []).filter((id) => openIds.has(id));
   state.stopOrderByStoreId = {};
 
   if (saved.origin) {
@@ -1519,11 +1629,11 @@ function applyRouteParamsFromUrl() {
   const stopsRaw = params.get('stops');
   if (!stopsRaw) return { shouldAutoRoute: false, hasCustomOrigin: false };
 
-  const validIds = new Set(BOOKSTORES.map((s) => s.id));
+  const openIds = new Set(getOpenBookstores().map((s) => s.id));
   const parsedStops = stopsRaw
     .split(',')
     .map((id) => id.trim())
-    .filter((id) => validIds.has(id));
+    .filter((id) => openIds.has(id));
 
   if (parsedStops.length === 0) {
     return { shouldAutoRoute: false, hasCustomOrigin: false };
@@ -1953,6 +2063,17 @@ function attachStaticListeners() {
     });
   }
 
+  if (dom.officialCrawlOnly) {
+    dom.officialCrawlOnly.addEventListener('change', () => {
+      const visibleCount = filterStoreList();
+      announceChecklistStatus(
+        dom.officialCrawlOnly.checked
+          ? `Showing ${visibleCount} official Atlanta Indie Bookshop Crawl stores.`
+          : `Showing ${visibleCount} independent bookstores.`
+      );
+    });
+  }
+
   if (dom.storeList) {
     dom.storeList.addEventListener('keydown', (event) => {
       const target = event.target;
@@ -1966,6 +2087,7 @@ function attachStaticListeners() {
 
       if (event.key === 'Enter' && isCheckbox) {
         event.preventDefault();
+        if (target.disabled) return;
         const storeId = item.dataset.storeId;
         if (storeId) {
           target.checked = !target.checked;
@@ -2034,11 +2156,13 @@ function attachStaticListeners() {
   }
 
   dom.selectAllBtn.addEventListener('click', () => {
-    const visibleIds = getFilteredStores().map((store) => store.id);
-    const merged = new Set([...state.selectedStoreIds, ...visibleIds]);
-    state.selectedStoreIds = BOOKSTORES.filter((store) => merged.has(store.id)).map(
-      (store) => store.id
-    );
+    const visibleOpenIds = getFilteredStores()
+      .filter(isStoreOpen)
+      .map((store) => store.id);
+    const merged = new Set([...state.selectedStoreIds, ...visibleOpenIds]);
+    state.selectedStoreIds = getOpenBookstores()
+      .filter((store) => merged.has(store.id))
+      .map((store) => store.id);
     state.stopOrderByStoreId = {};
     if (state.selectedStoreIds.length > 0) {
       setStoreSelectionError('');
@@ -2046,7 +2170,8 @@ function attachStaticListeners() {
     renderStoreList();
     refreshMarkers();
 
-    const msg = `Selected ${visibleIds.length} visible bookshops. ${state.selectedStoreIds.length} of ${BOOKSTORES.length} total selected.`;
+    const openCount = getOpenBookstores().length;
+    const msg = `Selected ${visibleOpenIds.length} visible open bookshops. ${state.selectedStoreIds.length} of ${openCount} open bookshops selected.`;
     announceChecklistStatus(msg);
     announceMapStatus(`Map markers updated: ${state.selectedStoreIds.length} bookshops selected.`);
   });
@@ -2058,7 +2183,9 @@ function attachStaticListeners() {
     dom.resetBtn.hidden = true;
     clearValidationErrors();
     clearNotice();
-    announceChecklistStatus('Cleared all selected bookstores. 0 of 36 selected.');
+    announceChecklistStatus(
+      `Cleared all selected bookstores. 0 of ${getOpenBookstores().length} open bookshops selected.`
+    );
     announceMapStatus('All bookstore selections and route markers cleared from the map.');
   });
 

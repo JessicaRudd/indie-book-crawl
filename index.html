@@ -95,7 +95,7 @@
 
             <div class="form-group">
               <div class="store-list-header">
-                <span class="field-label">Select Bookstores (<span id="selected-count">0</span> / 36)</span>
+                <span class="field-label">Select Bookstores (<span id="selected-count">0</span> / <span id="open-store-count">47</span>)</span>
                 <div class="store-list-actions">
                   <button type="button" id="select-all-btn" class="text-action-btn">Select Visible</button>
                   <span aria-hidden="true" class="separator">·</span>
@@ -109,6 +109,10 @@
                 placeholder="Filter by name, location, or genre (e.g. kirkwood romance)..."
                 aria-label="Filter bookstores by name, location, hours, or genre"
               />
+              <label class="crawl-filter-toggle">
+                <input type="checkbox" id="official-crawl-only" />
+                <span>Official Atlanta Indie Bookshop Crawl only (<span id="official-crawl-count">36</span>)</span>
+              </label>
               <p id="store-list-instructions" class="sr-only">
                 Use Up and Down Arrow keys or Home and End to move through bookshops, Left and Right Arrow keys to switch between the checkbox, Show Details button, and View button, and Space or Enter to toggle selection or expand details.
               </p>
