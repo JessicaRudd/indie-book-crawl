@@ -3,6 +3,8 @@ import { ATLANTA_CENTER, BOOKSTORES, QUICK_START_LOCATIONS } from './data.js';
 
 const USAGE_ATTRIBUTION_ID = 'gmp_mcp_codeassist_v1_aistudio';
 
+const MAX_ROUTE_STOPS = 26;
+
 const state = {
   map: null,
   infoWindow: null,
@@ -12,6 +14,7 @@ const state = {
     coords: { ...QUICK_START_LOCATIONS[0].coords },
   },
   selectedStoreIds: BOOKSTORES.filter((store) => store.defaultSelected).map((store) => store.id),
+  filterQuery: '',
   stopOrderByStoreId: {},
   storeMarkers: new Map(),
   originMarker: null,
@@ -25,6 +28,8 @@ const dom = {
   quickStartButtons: document.getElementById('quick-start-buttons'),
   originReadout: document.getElementById('selected-origin-readout'),
   departureTime: document.getElementById('departure-time'),
+  selectedCount: document.getElementById('selected-count'),
+  storeFilter: document.getElementById('store-filter'),
   storeList: document.getElementById('store-list'),
   selectAllBtn: document.getElementById('select-all-btn'),
   clearStoresBtn: document.getElementById('clear-stores-btn'),
@@ -121,10 +126,35 @@ function renderQuickStartButtons() {
   dom.quickStartButtons.replaceChildren(fragment);
 }
 
+function getFilteredStores() {
+  const query = state.filterQuery.trim().toLowerCase();
+  if (!query) return BOOKSTORES;
+  return BOOKSTORES.filter(
+    (store) =>
+      store.name.toLowerCase().includes(query) ||
+      store.neighborhood.toLowerCase().includes(query) ||
+      store.address.toLowerCase().includes(query)
+  );
+}
+
 function renderStoreList() {
+  if (dom.selectedCount) {
+    dom.selectedCount.textContent = String(state.selectedStoreIds.length);
+  }
+
+  const visibleStores = getFilteredStores();
   const fragment = document.createDocumentFragment();
 
-  BOOKSTORES.forEach((store) => {
+  if (visibleStores.length === 0) {
+    const emptyLi = document.createElement('li');
+    emptyLi.className = 'store-empty-row';
+    emptyLi.textContent = 'No participating shops match your filter.';
+    fragment.appendChild(emptyLi);
+    dom.storeList.replaceChildren(fragment);
+    return;
+  }
+
+  visibleStores.forEach((store) => {
     const isSelected = state.selectedStoreIds.includes(store.id);
     const stopOrder = state.stopOrderByStoreId[store.id];
 
@@ -162,7 +192,7 @@ function renderStoreList() {
 
     const meta = document.createElement('div');
     meta.className = 'store-meta';
-    meta.textContent = `${store.neighborhood} · ${store.specialty}`;
+    meta.textContent = [store.neighborhood, store.instagram].filter(Boolean).join(' · ');
 
     const address = document.createElement('div');
     address.className = 'store-address';
@@ -222,11 +252,40 @@ function buildInfoWindowContent(store) {
 
   const meta = document.createElement('p');
   meta.className = 'info-window-meta';
-  meta.textContent = `${store.neighborhood} · ${store.specialty}`;
+  meta.textContent = store.neighborhood;
 
   const address = document.createElement('p');
   address.className = 'info-window-address';
   address.textContent = store.address;
+
+  card.appendChild(title);
+  card.appendChild(meta);
+  card.appendChild(address);
+
+  if (store.website || store.instagram) {
+    const links = document.createElement('p');
+    links.className = 'info-window-links';
+    if (store.website) {
+      const siteLink = document.createElement('a');
+      siteLink.href = store.website;
+      siteLink.target = '_blank';
+      siteLink.rel = 'noopener noreferrer';
+      siteLink.className = 'info-window-link';
+      siteLink.textContent = 'Website';
+      links.appendChild(siteLink);
+    }
+    if (store.website && store.instagram) {
+      const sep = document.createElement('span');
+      sep.textContent = ' · ';
+      links.appendChild(sep);
+    }
+    if (store.instagram) {
+      const ig = document.createElement('span');
+      ig.textContent = `IG ${store.instagram}`;
+      links.appendChild(ig);
+    }
+    card.appendChild(links);
+  }
 
   const toggleBtn = document.createElement('button');
   toggleBtn.type = 'button';
@@ -237,9 +296,6 @@ function buildInfoWindowContent(store) {
     state.infoWindow.setContent(buildInfoWindowContent(store));
   });
 
-  card.appendChild(title);
-  card.appendChild(meta);
-  card.appendChild(address);
   card.appendChild(toggleBtn);
   return card;
 }
@@ -711,6 +767,16 @@ async function calculateRoute(event) {
 
   const originInput = state.selectedOrigin.coords || originText;
   const travelMode = getSelectedTravelMode();
+
+  // Google Routes API supports up to 25 intermediate waypoints plus 1 destination (26 bookshop stops).
+  if (travelMode !== 'TRANSIT' && selectedStores.length > MAX_ROUTE_STOPS) {
+    showNotice(
+      `Google Routes supports up to ${MAX_ROUTE_STOPS} bookshop stops per route. Please uncheck ${selectedStores.length - MAX_ROUTE_STOPS} shop(s) or plan in regional segments.`,
+      true
+    );
+    return;
+  }
+
   const { date: departureDate, notice: timeNotice } = getSelectedDepartureDate(travelMode);
 
   if (travelMode === 'TRANSIT' && selectedStores.length > 1) {
@@ -749,8 +815,19 @@ async function calculateRoute(event) {
 function attachStaticListeners() {
   dom.form.addEventListener('submit', calculateRoute);
 
+  if (dom.storeFilter) {
+    dom.storeFilter.addEventListener('input', () => {
+      state.filterQuery = dom.storeFilter.value;
+      renderStoreList();
+    });
+  }
+
   dom.selectAllBtn.addEventListener('click', () => {
-    state.selectedStoreIds = BOOKSTORES.map((store) => store.id);
+    const visibleIds = getFilteredStores().map((store) => store.id);
+    const merged = new Set([...state.selectedStoreIds, ...visibleIds]);
+    state.selectedStoreIds = BOOKSTORES.filter((store) => merged.has(store.id)).map(
+      (store) => store.id
+    );
     state.stopOrderByStoreId = {};
     renderStoreList();
     refreshMarkers();
@@ -771,7 +848,7 @@ function attachStaticListeners() {
     clearNotice();
     if (state.map) {
       state.map.panTo(ATLANTA_CENTER);
-      state.map.setZoom(12);
+      state.map.setZoom(10);
     }
   });
 }
@@ -817,7 +894,7 @@ async function initApp() {
     // mapId is required to render AdvancedMarkerElement instances.
     state.map = new GoogleMap(dom.mapContainer, {
       center: ATLANTA_CENTER,
-      zoom: 12,
+      zoom: 10,
       mapId: 'DEMO_MAP_ID',
       mapTypeControl: false,
       streetViewControl: false,

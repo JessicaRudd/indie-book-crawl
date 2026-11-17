@@ -4,7 +4,7 @@ An interactive map and multi-stop route planner for exploring independent bookst
 
 ## Features
 
-- **Curated Atlanta & Decatur Bookshops**: Includes Charis Books & More, Little Shop of Stories, A Cappella Books, Eagle Eye Book Shop, Tall Tales Book Shop, Brave + Kind Bookshop, and Posman Books.
+- **All 36 Official Crawl Bookshops**: Includes every participating bookstore listed on [atlantaindiebookshopcrawl.com](https://www.atlantaindiebookshopcrawl.com/), with city/neighborhood filtering, live map markers, and website/Instagram info cards.
 - **Place Autocomplete Start Input**: Powered by `PlaceAutocompleteElement` (Places API New) with quick-start Atlanta landmark buttons.
 - **Multi-Stop Route Optimization**: Uses `Route.computeRoutes()` (`optimizeWaypointOrder: true`) for Drive and Bike modes to find the fastest stop sequence.
 - **Traffic & Schedule Planning**: Supports future departure times with `TRAFFIC_AWARE_OPTIMAL` routing for driving and chronological leg-by-leg scheduling for MARTA / Transit.

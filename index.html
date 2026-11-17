@@ -80,13 +80,20 @@
 
             <div class="form-group">
               <div class="store-list-header">
-                <span class="field-label">Select Bookstores</span>
+                <span class="field-label">Select Bookstores (<span id="selected-count">0</span> / 36)</span>
                 <div class="store-list-actions">
-                  <button type="button" id="select-all-btn" class="text-action-btn">Select All</button>
+                  <button type="button" id="select-all-btn" class="text-action-btn">Select Visible</button>
                   <span aria-hidden="true" class="separator">·</span>
                   <button type="button" id="clear-stores-btn" class="text-action-btn">Clear</button>
                 </div>
               </div>
+              <input
+                type="search"
+                id="store-filter"
+                class="text-input store-filter-input"
+                placeholder="Filter 36 shops by name or city (e.g. Decatur, Marietta)..."
+                aria-label="Filter bookstores by name or city"
+              />
               <ul id="store-list" class="store-list" aria-label="Participating independent bookstores"></ul>
             </div>
 
