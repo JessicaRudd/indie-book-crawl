@@ -16,6 +16,7 @@ const state = {
     isCurrentLocation: false,
   },
   selectedStoreIds: [],
+  expandedStoreIds: new Set(),
   filterQuery: '',
   stopOrderByStoreId: {},
   storeMarkers: new Map(),
@@ -319,33 +320,48 @@ function renderQuickStartButtons() {
   dom.quickStartButtons.replaceChildren(fragment);
 }
 
-function storeMatchesQuery(store, normalizedQuery) {
-  if (!normalizedQuery) return true;
-  return (
-    store.name.toLowerCase().includes(normalizedQuery) ||
-    store.neighborhood.toLowerCase().includes(normalizedQuery) ||
-    store.address.toLowerCase().includes(normalizedQuery) ||
-    (store.instagram && store.instagram.toLowerCase().includes(normalizedQuery))
-  );
+function buildStoreSearchText(store) {
+  return [
+    store.name,
+    store.neighborhood,
+    store.address,
+    store.instagram,
+    store.hours,
+    store.description,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
+function storeMatchesTerms(searchText, rawQuery) {
+  const terms = String(rawQuery || '')
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (terms.length === 0) return true;
+  return terms.every((term) => searchText.includes(term));
 }
 
 function getFilteredStores() {
-  const query = state.filterQuery.trim().toLowerCase();
-  if (!query) return BOOKSTORES;
-  return BOOKSTORES.filter((store) => storeMatchesQuery(store, query));
+  if (!state.filterQuery.trim()) return BOOKSTORES;
+  return BOOKSTORES.filter((store) =>
+    storeMatchesTerms(buildStoreSearchText(store), state.filterQuery)
+  );
 }
 
 function filterStoreList() {
   if (!dom.storeList) return 0;
-  const query = (dom.storeFilter?.value ?? state.filterQuery).trim().toLowerCase();
-  state.filterQuery = dom.storeFilter ? dom.storeFilter.value : state.filterQuery;
+  const rawQuery = dom.storeFilter?.value ?? state.filterQuery;
+  state.filterQuery = rawQuery;
 
   const items = dom.storeList.querySelectorAll('.store-item');
   let visibleCount = 0;
 
   items.forEach((item) => {
     const searchText = item.dataset.search || '';
-    const matches = !query || searchText.includes(query);
+    const matches = storeMatchesTerms(searchText, rawQuery);
     item.hidden = !matches;
     if (matches) visibleCount += 1;
   });
@@ -365,12 +381,45 @@ function getActiveStoreControlState() {
   }
   const activeItem = activeEl.closest('.store-item');
   if (!activeItem?.dataset.storeId) return null;
+  let controlSelector = '.store-checkbox';
+  if (activeEl.classList.contains('store-details-btn')) {
+    controlSelector = '.store-details-btn';
+  } else if (activeEl.classList.contains('store-focus-btn')) {
+    controlSelector = '.store-focus-btn';
+  }
   return {
     storeId: activeItem.dataset.storeId,
-    controlSelector: activeEl.classList.contains('store-focus-btn')
-      ? '.store-focus-btn'
-      : '.store-checkbox',
+    controlSelector,
   };
+}
+
+function buildInstagramUrl(handle) {
+  const username = String(handle || '').replace(/^@+/, '').trim();
+  return `https://www.instagram.com/${encodeURIComponent(username)}/`;
+}
+
+function createInstagramLink(store, text, className) {
+  const link = document.createElement('a');
+  link.href = buildInstagramUrl(store.instagram);
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.className = className;
+  link.textContent = text;
+  link.setAttribute('aria-label', `${store.name} on Instagram (${store.instagram})`);
+  return link;
+}
+
+function createDetailLine(labelText, valueText) {
+  const line = document.createElement('p');
+  line.className = 'store-extra-line';
+  const label = document.createElement('span');
+  label.className = 'store-extra-label';
+  label.textContent = `${labelText}: `;
+  const value = document.createElement('span');
+  value.textContent = valueText;
+  line.appendChild(label);
+  line.appendChild(value);
+  return line;
 }
 
 function renderStoreList() {
@@ -383,15 +432,13 @@ function renderStoreList() {
 
   BOOKSTORES.forEach((store) => {
     const isSelected = state.selectedStoreIds.includes(store.id);
+    const isExpanded = state.expandedStoreIds.has(store.id);
     const stopOrder = state.stopOrderByStoreId[store.id];
 
     const li = document.createElement('li');
     li.className = 'store-item';
     li.dataset.storeId = store.id;
-    li.dataset.search = [store.name, store.neighborhood, store.address, store.instagram]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase();
+    li.dataset.search = buildStoreSearchText(store);
 
     const row = document.createElement('div');
     row.className = `store-row${isSelected ? ' is-selected' : ''}`;
@@ -428,15 +475,79 @@ function renderStoreList() {
 
     const meta = document.createElement('div');
     meta.className = 'store-meta';
-    meta.textContent = [store.neighborhood, store.instagram].filter(Boolean).join(' · ');
-
-    const address = document.createElement('div');
-    address.className = 'store-address';
-    address.textContent = store.address;
+    if (store.neighborhood) {
+      meta.appendChild(document.createTextNode(store.neighborhood));
+    }
+    if (store.neighborhood && store.instagram) {
+      meta.appendChild(document.createTextNode(' · '));
+    }
+    if (store.instagram) {
+      meta.appendChild(createInstagramLink(store, store.instagram, 'store-ig-link'));
+    }
 
     details.appendChild(titleRow);
     details.appendChild(meta);
-    details.appendChild(address);
+
+    const detailsPanelId = `store-details-${store.id}`;
+    const detailsPanel = document.createElement('div');
+    detailsPanel.id = detailsPanelId;
+    detailsPanel.className = 'store-extra-details';
+    detailsPanel.hidden = !isExpanded;
+
+    if (store.hours) {
+      detailsPanel.appendChild(createDetailLine('Hours', store.hours));
+    }
+    detailsPanel.appendChild(createDetailLine('Address', store.address));
+
+    if (store.description) {
+      const desc = document.createElement('p');
+      desc.className = 'store-extra-description';
+      desc.textContent = store.description;
+      detailsPanel.appendChild(desc);
+    }
+
+    if (store.website) {
+      const siteLink = document.createElement('a');
+      siteLink.href = store.website;
+      siteLink.target = '_blank';
+      siteLink.rel = 'noopener noreferrer';
+      siteLink.className = 'store-extra-link';
+      siteLink.textContent = 'Visit bookstore website';
+      detailsPanel.appendChild(siteLink);
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'store-item-actions';
+
+    const detailsBtn = document.createElement('button');
+    detailsBtn.type = 'button';
+    detailsBtn.className = `store-details-btn${isExpanded ? ' is-expanded' : ''}`;
+    detailsBtn.textContent = isExpanded ? 'Hide Details' : 'Show Details';
+    detailsBtn.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+    detailsBtn.setAttribute('aria-controls', detailsPanelId);
+    detailsBtn.setAttribute(
+      'aria-label',
+      `${isExpanded ? 'Hide' : 'Show'} details for ${store.name}`
+    );
+    detailsBtn.addEventListener('click', () => {
+      const nextExpanded = !state.expandedStoreIds.has(store.id);
+      if (nextExpanded) {
+        state.expandedStoreIds.add(store.id);
+      } else {
+        state.expandedStoreIds.delete(store.id);
+      }
+      detailsPanel.hidden = !nextExpanded;
+      detailsBtn.classList.toggle('is-expanded', nextExpanded);
+      detailsBtn.textContent = nextExpanded ? 'Hide Details' : 'Show Details';
+      detailsBtn.setAttribute('aria-expanded', nextExpanded ? 'true' : 'false');
+      detailsBtn.setAttribute(
+        'aria-label',
+        `${nextExpanded ? 'Hide' : 'Show'} details for ${store.name}`
+      );
+      announceChecklistStatus(
+        `${nextExpanded ? 'Expanded' : 'Collapsed'} details for ${store.name}.`
+      );
+    });
 
     const focusBtn = document.createElement('button');
     focusBtn.type = 'button';
@@ -445,10 +556,14 @@ function renderStoreList() {
     focusBtn.setAttribute('aria-label', `Center map on ${store.name}`);
     focusBtn.addEventListener('click', () => focusStoreOnMap(store));
 
+    actions.appendChild(detailsBtn);
+    actions.appendChild(focusBtn);
+
     row.appendChild(checkbox);
     row.appendChild(details);
-    row.appendChild(focusBtn);
+    row.appendChild(actions);
     li.appendChild(row);
+    li.appendChild(detailsPanel);
     fragment.appendChild(li);
   });
 
@@ -555,9 +670,7 @@ function buildInfoWindowContent(store) {
       links.appendChild(sep);
     }
     if (store.instagram) {
-      const ig = document.createElement('span');
-      ig.textContent = `IG ${store.instagram}`;
-      links.appendChild(ig);
+      links.appendChild(createInstagramLink(store, `IG ${store.instagram}`, 'info-window-link'));
     }
     card.appendChild(links);
   }
@@ -1847,8 +1960,9 @@ function attachStaticListeners() {
       if (!item || !dom.storeList.contains(item)) return;
 
       const isCheckbox = target.classList.contains('store-checkbox');
+      const isDetailsBtn = target.classList.contains('store-details-btn');
       const isFocusBtn = target.classList.contains('store-focus-btn');
-      if (!isCheckbox && !isFocusBtn) return;
+      if (!isCheckbox && !isDetailsBtn && !isFocusBtn) return;
 
       if (event.key === 'Enter' && isCheckbox) {
         event.preventDefault();
@@ -1860,15 +1974,29 @@ function attachStaticListeners() {
         return;
       }
 
-      if (event.key === 'ArrowRight' && isCheckbox) {
-        event.preventDefault();
-        item.querySelector('.store-focus-btn')?.focus();
+      if (event.key === 'ArrowRight') {
+        const nextInRow = isCheckbox
+          ? item.querySelector('.store-details-btn')
+          : isDetailsBtn
+            ? item.querySelector('.store-focus-btn')
+            : null;
+        if (nextInRow) {
+          event.preventDefault();
+          nextInRow.focus();
+        }
         return;
       }
 
-      if (event.key === 'ArrowLeft' && isFocusBtn) {
-        event.preventDefault();
-        item.querySelector('.store-checkbox')?.focus();
+      if (event.key === 'ArrowLeft') {
+        const prevInRow = isFocusBtn
+          ? item.querySelector('.store-details-btn')
+          : isDetailsBtn
+            ? item.querySelector('.store-checkbox')
+            : null;
+        if (prevInRow) {
+          event.preventDefault();
+          prevInRow.focus();
+        }
         return;
       }
 
@@ -1891,7 +2019,11 @@ function attachStaticListeners() {
 
       if (nextIndex !== null) {
         event.preventDefault();
-        const selector = isFocusBtn ? '.store-focus-btn' : '.store-checkbox';
+        const selector = isDetailsBtn
+          ? '.store-details-btn'
+          : isFocusBtn
+            ? '.store-focus-btn'
+            : '.store-checkbox';
         const nextControl = visibleItems[nextIndex]?.querySelector(selector);
         if (nextControl) {
           nextControl.focus();

@@ -30,6 +30,9 @@ export const BOOKSTORES = [
     address: '722 W College Ave, Decatur, GA 30030',
     website: 'https://braveandkindbookshop.com',
     instagram: '@braveandkindbooks',
+    hours: 'Tue–Fri 11am–6pm, Sat 10am–4pm, Sun 12pm–4pm (Mon closed)',
+    description:
+      'Black-owned neighborhood children’s and family bookshop curating diverse picture books, middle grade, YA, and thoughtful gifts.',
     coords: { lat: 33.766425, lng: -84.305705 },
     defaultSelected: false,
   },
@@ -40,6 +43,9 @@ export const BOOKSTORES = [
     address: '184 S Candler St, Decatur, GA 30030',
     website: 'https://charisbooksandmore.com',
     instagram: '@charisbooksandmore',
+    hours: 'Mon–Sat 10am–7pm, Sun 12pm–6pm',
+    description:
+      'Historic independent feminist and LGBTQ+ bookstore specializing in queer literature, social justice, literary fiction, poetry, and community events.',
     coords: { lat: 33.768465, lng: -84.292515 },
     defaultSelected: false,
   },
@@ -50,6 +56,9 @@ export const BOOKSTORES = [
     address: '133 E Court Square # A, Decatur, GA 30030',
     website: 'https://littleshopofstories.com',
     instagram: '@littleshopofstories',
+    hours: 'Mon–Sat 10am–8pm, Sun 10am–7pm',
+    description:
+      'Beloved Decatur Square independent bookstore known for children’s books, young adult, graphic novels, fiction, nonfiction, and author events.',
     coords: { lat: 33.775128, lng: -84.29584 },
     defaultSelected: false,
   },
@@ -60,6 +69,9 @@ export const BOOKSTORES = [
     address: '208 Haralson Ave. NE, Atlanta, GA 30307',
     website: 'https://acappellabooks.com',
     instagram: '@acappellabooks',
+    hours: 'Mon–Sat 10am–7pm, Sun 12pm–6pm',
+    description:
+      'Long-running Inman Park indie offering curated new and used literary fiction, music and pop culture, history, biography, poetry, and signed first editions.',
     coords: { lat: 33.759613, lng: -84.350509 },
     defaultSelected: false,
   },
@@ -70,6 +82,9 @@ export const BOOKSTORES = [
     address: '2076 N Decatur Rd, Decatur, GA 30033',
     website: 'https://eagleeyebooks.com',
     instagram: '@Eagleeyebooks',
+    hours: 'Mon–Sat 10am–7pm, Sun 12pm–6pm',
+    description:
+      'Spacious general-interest indie bookstore stocking new and used fiction, mystery, sci-fi, fantasy, history, children’s books, and signed author editions.',
     coords: { lat: 33.790473, lng: -84.306782 },
     defaultSelected: false,
   },
@@ -80,6 +95,9 @@ export const BOOKSTORES = [
     address: '2105 Lavista Rd. NE #108, Atlanta, GA 30329',
     website: 'https://www.talltalesatlanta.com',
     instagram: '@talltalesbooks',
+    hours: 'Mon–Sat 10am–7pm, Sun 12:30pm–5:30pm',
+    description:
+      'Classic Toco Hill neighborhood bookstore offering hand-picked literary fiction, mysteries, thrillers, biographies, travel guides, and kids’ reads.',
     coords: { lat: 33.816314, lng: -84.316407 },
     defaultSelected: false,
   },
@@ -90,6 +108,9 @@ export const BOOKSTORES = [
     address: '1188 Glenwood Ave SE, Atlanta, GA 30316',
     website: 'https://BookishATL.com',
     instagram: '@bookishatlanta',
+    hours: 'Hours vary seasonally; check @bookishatlanta for current walk-in hours',
+    description:
+      'Cozy East Atlanta Village queer-owned indie spotlighting fiction, romance, mystery, banned books, and inclusive voices across genres.',
     coords: { lat: 33.740421, lng: -84.349448 },
     defaultSelected: false,
   },
@@ -100,6 +121,9 @@ export const BOOKSTORES = [
     address: '1034 North Highland Ave NE, Atlanta, GA 30306',
     website: 'https://Vahibooks.com',
     instagram: '@vahibooks',
+    hours: 'Mon–Sat 10am–7pm, Sun 12pm–5pm',
+    description:
+      'Warm neighborhood bookstore on North Highland featuring contemporary fiction, nonfiction, romance, mystery, cookbooks, and children’s corners.',
     coords: { lat: 33.782989, lng: -84.354538 },
     defaultSelected: false,
   },
@@ -110,16 +134,22 @@ export const BOOKSTORES = [
     address: '451 Lee Street, Atlanta, GA 30310',
     website: 'https://www.44thand3rdbookseller.com',
     instagram: '@44thand3rdbookseller',
+    hours: 'Tue–Sat 12pm–7pm, Sun 12pm–5pm (Mon closed)',
+    description:
+      'Family-owned West End bookstore dedicated to Black literature, African diaspora history, literary fiction, memoirs, and children’s titles.',
     coords: { lat: 33.743366, lng: -84.414109 },
     defaultSelected: false,
   },
   {
     id: 'all-the-tropes',
     name: 'All The Tropes',
-    neighborhood: 'Atlanta · Edgewood',
+    neighborhood: 'Atlanta · Kirkwood / Edgewood',
     address: '27 Doyle Street SE, Atlanta, GA 30317',
     website: 'https://allthetropesbookstore.com',
     instagram: '@allthetropesbookstore',
+    hours: 'Wed–Sat 11am–7pm, Sun 12pm–6pm (Mon–Tue closed)',
+    description:
+      'Atlanta’s dedicated romance bookstore in the Kirkwood and Edgewood corridor, stocking contemporary, fantasy, historical, and queer romance plus bookish gifts.',
     coords: { lat: 33.751955, lng: -84.324353 },
     defaultSelected: false,
   },
@@ -130,6 +160,9 @@ export const BOOKSTORES = [
     address: '213 Mitchell St SW, Atlanta, GA 30303',
     website: '',
     instagram: '@ovevillagebooks',
+    hours: 'Daily 11am–6pm (hours may vary for author events)',
+    description:
+      'Cozy South Downtown community bookstore featuring bestselling fiction, nonfiction, local Atlanta authors, and diverse cultural titles.',
     coords: { lat: 33.75182, lng: -84.394498 },
     defaultSelected: false,
   },
@@ -140,6 +173,9 @@ export const BOOKSTORES = [
     address: '839 Joseph E Boone Blvd NW, Ste E103, Atlanta, GA 30314',
     website: 'https://darklyrooted.com',
     instagram: '@darklyrootedbooks',
+    hours: 'Wed–Sat 10am–6pm, Sun 10am–5pm (Mon–Tue closed)',
+    description:
+      'Speculative fiction bookshop exclusively celebrating science fiction, fantasy, horror, and afrofuturism by BIPOC and global-majority authors.',
     coords: { lat: 33.763512, lng: -84.414826 },
     defaultSelected: false,
   },
@@ -150,6 +186,9 @@ export const BOOKSTORES = [
     address: '1161 Ridge Ave SW Suite 104, Atlanta, GA 30315',
     website: 'https://www.offbeatbooks.com',
     instagram: '@offbeatbooksatl',
+    hours: 'Mon–Wed 11am–7pm, Thu–Sat 11am–8pm, Sun 11am–6pm',
+    description:
+      'Switchman Hall indie bookstore specializing in speculative sci-fi, fantasy, horror, manga, quirky literary fiction, thrillers, and romance.',
     coords: { lat: 33.723113, lng: -84.389115 },
     defaultSelected: false,
   },
@@ -160,6 +199,9 @@ export const BOOKSTORES = [
     address: '32 N Avondale Rd UNIT C, Avondale Estates, GA 30002',
     website: 'https://www.thebook-bird.com',
     instagram: '@thebookbirdae',
+    hours: 'Mon–Tue 7:30am–6pm, Wed–Sat 7:30am–9pm, Sun 8am–6pm',
+    description:
+      'Independent bookstore, coffee shop, and wine bar in Avondale Estates offering general fiction, nonfiction, local writers, and cozy cafe seating.',
     coords: { lat: 33.775846, lng: -84.265878 },
     defaultSelected: false,
   },
@@ -170,6 +212,9 @@ export const BOOKSTORES = [
     address: '40 Franklin St Suite 500, Avondale Estates, GA 30002',
     website: 'https://asmallplacebooks.com',
     instagram: '@asmallplacebookshop',
+    hours: 'Event-based and boutique hours; check @asmallplacebookshop before visiting',
+    description:
+      'Curated Avondale Estates bookshop centering Black literature, storytelling, adult fiction, memoirs, and children’s books by Black authors.',
     coords: { lat: 33.77663, lng: -84.27094 },
     defaultSelected: false,
   },
@@ -180,6 +225,9 @@ export const BOOKSTORES = [
     address: '3660 Clairmont Road, Atlanta, GA 30341',
     website: 'https://atlantavintagebooks.com',
     instagram: '@atlantavintagebooks',
+    hours: 'Mon–Sat 10am–6pm, Sun 12pm–5pm',
+    description:
+      'Two-story treasure trove of used, rare, out-of-print, and vintage books spanning history, classics, sci-fi, mystery, and resident shop cats.',
     coords: { lat: 33.866536, lng: -84.309519 },
     defaultSelected: false,
   },
@@ -190,6 +238,9 @@ export const BOOKSTORES = [
     address: '3460 Chamblee Dunwoody Way, Chamblee, GA 30341',
     website: 'https://wildasterbooks.com',
     instagram: '@wildasterbooks',
+    hours: 'Tue–Thu & Sun 10am–7pm, Fri–Sat 10am–8pm (Mon closed)',
+    description:
+      'Whimsical storybook-inspired indie bookshop and toy store in downtown Chamblee stocking curated children’s titles, adult fiction, and family reads.',
     coords: { lat: 33.892584, lng: -84.302021 },
     defaultSelected: false,
   },
@@ -200,6 +251,9 @@ export const BOOKSTORES = [
     address: '5529 Chamblee Dunwoody Rd Suite 260, Dunwoody, GA 30338',
     website: '',
     instagram: '@preludebookstorega',
+    hours: 'Tue–Thu 10am–6pm, Fri–Sat 10am–8pm (Sun–Mon closed)',
+    description:
+      'Neighborhood Dunwoody bookstore offering general adult fiction, nonfiction, children’s picture books, middle grade, and stationery gifts.',
     coords: { lat: 33.948664, lng: -84.335812 },
     defaultSelected: false,
   },
@@ -210,6 +264,9 @@ export const BOOKSTORES = [
     address: '2323 Main Street, B1, Tucker, GA 30084',
     website: 'https://Blackdogbookstucker.com',
     instagram: '@blackdogbooks_tucker',
+    hours: 'Mon–Sat 10am–7pm, Sun 11am–5pm',
+    description:
+      'Friendly Main Street Tucker bookshop carrying new and gently used fiction, mysteries, sci-fi, kids’ books, and local reading-group favorites.',
     coords: { lat: 33.853164, lng: -84.214284 },
     defaultSelected: false,
   },
@@ -220,6 +277,9 @@ export const BOOKSTORES = [
     address: '2450 Atlanta Rd SE Suite 300, Smyrna, GA 30080',
     website: 'https://sincerelyyoursbookstore.com',
     instagram: '@sincerelyyoursbookstore',
+    hours: 'Tue–Wed 11am–5pm, Thu–Sun 11am–7pm (Mon closed)',
+    description:
+      'Romance-forward Smyrna bookshop where romance titles fill most of the shelves alongside popular fantasy, thrillers, and contemporary fiction.',
     coords: { lat: 33.893289, lng: -84.519953 },
     defaultSelected: false,
   },
@@ -230,6 +290,9 @@ export const BOOKSTORES = [
     address: '1400 Veterans Memorial Hwy Suite 140, Mableton, GA 30126',
     website: 'https://allthingsinspirationgift.com',
     instagram: '@allthingsinspirationgift',
+    hours: 'Hours vary; call (678) 671-0270 or check website for daily walk-in times',
+    description:
+      'Christian bookstore and gift boutique offering faith-based books, Bibles, devotionals, inspirational nonfiction, and church gifts.',
     coords: { lat: 33.815425, lng: -84.594864 },
     defaultSelected: false,
   },
@@ -240,6 +303,9 @@ export const BOOKSTORES = [
     address: '5000 Austell Powder Springs Rd Suite 257, Austell, GA 30106',
     website: 'https://shelfloveatlanta.com',
     instagram: '@shelfloveatlanta',
+    hours: 'Wed–Sat 12pm–6pm, Sun 1pm–5pm (Mon–Tue closed)',
+    description:
+      'Austell romance bookstore inside Threadmill Complex specializing in indie romance authors, special editions, signed paperbacks, and tropes.',
     coords: { lat: 33.832437, lng: -84.654645 },
     defaultSelected: false,
   },
@@ -250,6 +316,9 @@ export const BOOKSTORES = [
     address: '4451 Marietta St, Powder Springs, GA 30127',
     website: 'https://thebookwormonline.com',
     instagram: '@shopthebookworm',
+    hours: 'Mon–Wed & Fri–Sat 10am–6pm, Thu 10am–7pm (Sun closed)',
+    description:
+      'Downtown Powder Springs indie carrying new and used books across fiction, romance, mystery, young adult, children’s titles, and book clubs.',
     coords: { lat: 33.85948, lng: -84.683317 },
     defaultSelected: false,
   },
@@ -260,6 +329,9 @@ export const BOOKSTORES = [
     address: '7475 Douglas Blvd #108, Douglasville, GA 30135',
     website: 'https://book-wyrm.net',
     instagram: '@bookwyrm_bookstore',
+    hours: 'Tue–Thu 11am–6pm, Fri–Sat 11am–7pm (Sun–Mon closed)',
+    description:
+      'Community used and independent bookstore in Douglasville stocked with fantasy, sci-fi, fiction, nonfiction, and family reads for all ages.',
     coords: { lat: 33.729018, lng: -84.752231 },
     defaultSelected: false,
   },
@@ -270,6 +342,9 @@ export const BOOKSTORES = [
     address: '21 W Park Square, Marietta, GA 30060',
     website: 'https://thereadingattic.com',
     instagram: '@thereadingattic',
+    hours: 'Tue–Wed 11am–6pm, Thu–Fri 11am–7pm, Sat 10am–7pm, Sun 12pm–5pm (Mon closed)',
+    description:
+      'Charming Marietta Square bookshop offering curated fiction, mystery, romance, fantasy, nonfiction, children’s books, and literary gifts.',
     coords: { lat: 33.952608, lng: -84.550219 },
     defaultSelected: false,
   },
@@ -280,6 +355,9 @@ export const BOOKSTORES = [
     address: '1289 Roswell Rd Suite 700, Marietta, GA 30062',
     website: '',
     instagram: '@lavenderbookshop',
+    hours: 'Fri–Tue 12pm–7pm (Wed–Thu closed)',
+    description:
+      'Queer-focused Marietta bookstore exclusively stocking LGBTQ+ fiction, romance, YA, graphic novels, queer history, and community reads.',
     coords: { lat: 33.950917, lng: -84.515008 },
     defaultSelected: false,
   },
@@ -290,6 +368,9 @@ export const BOOKSTORES = [
     address: '2932 Canton Rd # 220, Marietta, GA 30066',
     website: 'https://bookexchangemarietta.com',
     instagram: '@bookexchange.marietta',
+    hours: 'Mon–Tue & Thu–Sat 10am–6pm, Sun 1pm–6pm (Wed closed)',
+    description:
+      'Longstanding Marietta used bookstore with trade-in credit and massive shelves of mystery, romance, sci-fi, westerns, history, and paperbacks.',
     coords: { lat: 34.0233, lng: -84.52845 },
     defaultSelected: false,
   },
@@ -300,6 +381,9 @@ export const BOOKSTORES = [
     address: '3822 Roswell Rd #117, Marietta, GA 30062',
     website: 'https://bookmiser.net',
     instagram: '@bookmiser',
+    hours: 'Sun 12pm–5pm; call (770) 509-5611 or check site for weekday hours',
+    description:
+      'East Cobb indie bookstore known for new releases, literary fiction, nonfiction, book-club picks, signed copies, and local author talks.',
     coords: { lat: 33.977852, lng: -84.440001 },
     defaultSelected: false,
   },
@@ -310,6 +394,9 @@ export const BOOKSTORES = [
     address: '5058 Cherokee St, Acworth, GA 30101',
     website: 'https://www.thecrazybookladyga.com',
     instagram: '@thecrazybookladyga',
+    hours: 'Mon–Sat 9:30am–7pm, Sun 10am–4pm',
+    description:
+      'Cozy Acworth used and new bookstore brimming with fiction, romance, thrillers, fantasy, children’s books, and adoptable cats.',
     coords: { lat: 34.073028, lng: -84.677145 },
     defaultSelected: false,
   },
@@ -320,6 +407,9 @@ export const BOOKSTORES = [
     address: '105 E Main St, Woodstock, GA 30188',
     website: 'https://foxtalebookshoppe.com/',
     instagram: '@foxtale_book_shoppe',
+    hours: 'Mon–Tue 10am–5pm, Wed–Sat 10am–6pm, Sun 12pm–5pm',
+    description:
+      'Downtown Woodstock’s landmark independent bookstore hosting major author signings and stocking fiction, history, mystery, Southern lit, and kids’ books.',
     coords: { lat: 34.102379, lng: -84.518704 },
     defaultSelected: false,
   },
@@ -330,6 +420,9 @@ export const BOOKSTORES = [
     address: '1890 Heritage Walk Suite P101, Milton, GA 30004',
     website: 'https://poeandcompanybookstore.com',
     instagram: '@poeandcompanybookstorellc',
+    hours: 'Mon–Wed & Sat 10am–5pm, Thu–Fri 10am–7pm (Sun closed)',
+    description:
+      'Crabapple-area independent bookshop in Milton featuring contemporary fiction, mystery, coffee-table art books, children’s reads, and author events.',
     coords: { lat: 34.184239, lng: -84.304204 },
     defaultSelected: false,
   },
@@ -340,6 +433,9 @@ export const BOOKSTORES = [
     address: '6000 Medlock Bridge Pkwy Suite B500, Johns Creek, GA 30022',
     website: 'https://johnscreekbooks.com',
     instagram: '@johnscreekbooks',
+    hours: 'Mon–Sat 10am–7pm, Sun 9am–3pm',
+    description:
+      'Independent community bookstore and gift shop in Johns Creek carrying general fiction, nonfiction, religious & inspirational titles, and children’s books.',
     coords: { lat: 34.0286, lng: -84.189458 },
     defaultSelected: false,
   },
@@ -350,6 +446,9 @@ export const BOOKSTORES = [
     address: '3630 Peachtree Pkwy, Suite 314, Suwanee, GA 30024',
     website: 'https://Read-It-Again.com',
     instagram: '@readitagainbooks',
+    hours: 'Mon–Thu 10am–8pm, Fri 10am–7pm, Sat 10am–5pm, Sun 12pm–5pm',
+    description:
+      'Suwanee new and used bookstore offering vast sections of romance, sci-fi, fantasy, manga, mystery, kids’ books, and vinyl records.',
     coords: { lat: 34.070453, lng: -84.167342 },
     defaultSelected: false,
   },
@@ -360,6 +459,9 @@ export const BOOKSTORES = [
     address: '1048 Homestead Way St, Suite A, Dacula, GA 30019',
     website: 'https://wildbirdbookshop.com',
     instagram: '@wildbirdbookshop',
+    hours: 'Tue–Sat 10am–7pm, Sun 1pm–5pm (Mon closed)',
+    description:
+      'Welcoming Gwinnett County indie bookstore in Dacula featuring curated fiction, romance, fantasy, nonfiction, young adult, and book club gatherings.',
     coords: { lat: 34.038034, lng: -83.90412 },
     defaultSelected: false,
   },
@@ -370,6 +472,9 @@ export const BOOKSTORES = [
     address: '224 Main Street, Gainesville, GA 30501',
     website: 'https://Thestorybookmkt.com',
     instagram: '@thestorybookmkt',
+    hours: 'Wed 10am–5pm, Thu–Sat 10am–6pm (Sun–Tue closed)',
+    description:
+      'Enchanting Gainesville square children’s bookstore and market stocked with illustrated picture books, young reader series, and creative gifts.',
     coords: { lat: 34.298587, lng: -83.826934 },
     defaultSelected: false,
   },
@@ -380,6 +485,9 @@ export const BOOKSTORES = [
     address: '951 Railroad St NW, Conyers, GA 30012',
     website: 'https://thebookcellar.shop',
     instagram: '@thebookcellaratl',
+    hours: 'Check thebookcellar.shop or call (770) 628-5200 for daily cafe & store hours',
+    description:
+      'Black- and woman-owned Olde Town Conyers bookstore and coffee cafe offering fiction, nonfiction, Black authors, children’s books, and community events.',
     coords: { lat: 33.667538, lng: -84.019534 },
     defaultSelected: false,
   },

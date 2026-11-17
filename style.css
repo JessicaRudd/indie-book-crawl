@@ -483,11 +483,37 @@ input[type='checkbox']:focus-visible {
   font-weight: 500;
 }
 
+.store-ig-link {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.store-ig-link:hover {
+  text-decoration: underline;
+}
+
+.store-ig-link:focus-visible {
+  outline: 2px solid var(--accent-orange);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 .store-address {
   font-size: 0.75rem;
   color: var(--text-cocoa);
 }
 
+.store-item-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.store-details-btn,
 .store-focus-btn {
   appearance: none;
   border: 1px solid var(--border-hairline);
@@ -501,19 +527,70 @@ input[type='checkbox']:focus-visible {
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
-  margin-top: 2px;
   transition: border-color 160ms ease, color 160ms ease, background-color 160ms ease;
 }
 
+.store-details-btn:hover,
 .store-focus-btn:hover {
   border-color: var(--accent-sage);
   color: var(--accent-sage);
   background-color: var(--accent-sage-soft);
 }
 
+.store-details-btn.is-expanded {
+  border-color: var(--accent-sage);
+  color: var(--accent-sage);
+  background-color: var(--accent-sage-soft);
+  font-weight: 600;
+}
+
+.store-details-btn:focus-visible,
 .store-focus-btn:focus-visible {
   outline: 2px solid var(--accent-orange);
   outline-offset: 2px;
+}
+
+.store-extra-details {
+  margin: 0 14px 12px 44px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-linen);
+  border: 1px solid var(--border-hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--text-espresso);
+}
+
+.store-extra-details[hidden] {
+  display: none;
+}
+
+.store-extra-line {
+  margin: 0;
+}
+
+.store-extra-label {
+  font-weight: 600;
+  color: var(--text-cocoa);
+}
+
+.store-extra-description {
+  margin: 0;
+  color: var(--text-espresso);
+}
+
+.store-extra-link {
+  color: var(--accent-sage);
+  font-weight: 600;
+  text-decoration: none;
+  align-self: flex-start;
+}
+
+.store-extra-link:hover {
+  text-decoration: underline;
 }
 
 .notice-banner {
