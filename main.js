@@ -33,9 +33,12 @@ const dom = {
   quickStartButtons: document.getElementById('quick-start-buttons'),
   originReadout: document.getElementById('selected-origin-readout'),
   departureTime: document.getElementById('departure-time'),
+  setNowBtn: document.getElementById('set-now-btn'),
+  departureTimeError: document.getElementById('departure-time-error'),
   selectedCount: document.getElementById('selected-count'),
   storeFilter: document.getElementById('store-filter'),
   storeList: document.getElementById('store-list'),
+  storeSelectionError: document.getElementById('store-selection-error'),
   selectAllBtn: document.getElementById('select-all-btn'),
   clearStoresBtn: document.getElementById('clear-stores-btn'),
   noticeBanner: document.getElementById('route-notice'),
@@ -260,15 +263,41 @@ function renderQuickStartButtons() {
   dom.quickStartButtons.replaceChildren(fragment);
 }
 
+function storeMatchesQuery(store, normalizedQuery) {
+  if (!normalizedQuery) return true;
+  return (
+    store.name.toLowerCase().includes(normalizedQuery) ||
+    store.neighborhood.toLowerCase().includes(normalizedQuery) ||
+    store.address.toLowerCase().includes(normalizedQuery) ||
+    (store.instagram && store.instagram.toLowerCase().includes(normalizedQuery))
+  );
+}
+
 function getFilteredStores() {
   const query = state.filterQuery.trim().toLowerCase();
   if (!query) return BOOKSTORES;
-  return BOOKSTORES.filter(
-    (store) =>
-      store.name.toLowerCase().includes(query) ||
-      store.neighborhood.toLowerCase().includes(query) ||
-      store.address.toLowerCase().includes(query)
-  );
+  return BOOKSTORES.filter((store) => storeMatchesQuery(store, query));
+}
+
+function filterStoreList() {
+  if (!dom.storeList) return;
+  const query = (dom.storeFilter?.value ?? state.filterQuery).trim().toLowerCase();
+  state.filterQuery = dom.storeFilter ? dom.storeFilter.value : state.filterQuery;
+
+  const items = dom.storeList.querySelectorAll('.store-item');
+  let visibleCount = 0;
+
+  items.forEach((item) => {
+    const searchText = item.dataset.search || '';
+    const matches = !query || searchText.includes(query);
+    item.hidden = !matches;
+    if (matches) visibleCount += 1;
+  });
+
+  const emptyRow = dom.storeList.querySelector('.store-empty-row');
+  if (emptyRow) {
+    emptyRow.hidden = visibleCount > 0;
+  }
 }
 
 function renderStoreList() {
@@ -276,24 +305,19 @@ function renderStoreList() {
     dom.selectedCount.textContent = String(state.selectedStoreIds.length);
   }
 
-  const visibleStores = getFilteredStores();
   const fragment = document.createDocumentFragment();
 
-  if (visibleStores.length === 0) {
-    const emptyLi = document.createElement('li');
-    emptyLi.className = 'store-empty-row';
-    emptyLi.textContent = 'No participating shops match your filter.';
-    fragment.appendChild(emptyLi);
-    dom.storeList.replaceChildren(fragment);
-    return;
-  }
-
-  visibleStores.forEach((store) => {
+  BOOKSTORES.forEach((store) => {
     const isSelected = state.selectedStoreIds.includes(store.id);
     const stopOrder = state.stopOrderByStoreId[store.id];
 
     const li = document.createElement('li');
     li.className = 'store-item';
+    li.dataset.storeId = store.id;
+    li.dataset.search = [store.name, store.neighborhood, store.address, store.instagram]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
 
     const row = document.createElement('div');
     row.className = `store-row${isSelected ? ' is-selected' : ''}`;
@@ -350,7 +374,14 @@ function renderStoreList() {
     fragment.appendChild(li);
   });
 
+  const emptyLi = document.createElement('li');
+  emptyLi.className = 'store-empty-row';
+  emptyLi.textContent = 'No participating shops match your filter.';
+  emptyLi.hidden = true;
+  fragment.appendChild(emptyLi);
+
   dom.storeList.replaceChildren(fragment);
+  filterStoreList();
 }
 
 function refreshMarkers() {
@@ -370,6 +401,9 @@ function toggleStoreSelection(storeId, shouldInclude) {
     state.selectedStoreIds = state.selectedStoreIds.filter((id) => id !== storeId);
   }
   state.stopOrderByStoreId = {};
+  if (state.selectedStoreIds.length > 0) {
+    setStoreSelectionError('');
+  }
   renderStoreList();
   refreshMarkers();
 }
@@ -551,24 +585,139 @@ function getSelectedTravelMode() {
   return checked ? checked.value : 'DRIVING';
 }
 
-function getSelectedDepartureDate(travelMode) {
-  const raw = dom.departureTime.value;
-  if (!raw) return { date: null, notice: null };
+function formatLocalDateTimeInput(date) {
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) {
-    return { date: null, notice: null };
+function setDepartureTimeError(message) {
+  const hasError = Boolean(message);
+  if (dom.departureTime) {
+    dom.departureTime.classList.toggle('is-invalid', hasError);
+    dom.departureTime.setAttribute('aria-invalid', hasError ? 'true' : 'false');
   }
+  if (dom.departureTimeError) {
+    dom.departureTimeError.textContent = message;
+    dom.departureTimeError.hidden = !hasError;
+  }
+}
 
-  // Routes API rejects past departureTime values for DRIVING.
-  if (travelMode === 'DRIVING' && parsed.getTime() <= Date.now()) {
+function setStoreSelectionError(message) {
+  const hasError = Boolean(message);
+  if (dom.storeList) {
+    dom.storeList.classList.toggle('is-invalid', hasError);
+    dom.storeList.setAttribute('aria-invalid', hasError ? 'true' : 'false');
+  }
+  if (dom.storeSelectionError) {
+    dom.storeSelectionError.textContent = message;
+    dom.storeSelectionError.hidden = !hasError;
+  }
+}
+
+function clearValidationErrors() {
+  setDepartureTimeError('');
+  setStoreSelectionError('');
+}
+
+function validateDepartureDate(travelMode) {
+  const raw = dom.departureTime?.value?.trim() || '';
+  if (!raw) {
     return {
+      valid: false,
       date: null,
-      notice: 'Driving traffic predictions require a future departure time; calculating route using current traffic.',
+      message: 'Please select a departure date and time before generating a route.',
     };
   }
 
-  return { date: parsed, notice: null };
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return {
+      valid: false,
+      date: null,
+      message: 'Please enter a valid departure date and time.',
+    };
+  }
+
+  const nowMs = Date.now();
+  if (travelMode === 'DRIVING') {
+    const fiveMinutesMs = 5 * 60 * 1000;
+    if (parsed.getTime() < nowMs - fiveMinutesMs) {
+      return {
+        valid: false,
+        date: null,
+        message: 'For Drive mode, choose a current or future departure time.',
+      };
+    }
+    return {
+      valid: true,
+      date: new Date(Math.max(parsed.getTime(), nowMs + 60 * 1000)),
+      message: '',
+    };
+  }
+
+  if (travelMode === 'TRANSIT') {
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+    const hundredDaysMs = 100 * 24 * 60 * 60 * 1000;
+    if (parsed.getTime() < nowMs - sevenDaysMs || parsed.getTime() > nowMs + hundredDaysMs) {
+      return {
+        valid: false,
+        date: null,
+        message: 'Transit schedules are available from 7 days ago up to 100 days ahead.',
+      };
+    }
+  }
+
+  return { valid: true, date: parsed, message: '' };
+}
+
+function validateCrawlForm() {
+  clearValidationErrors();
+
+  const storeById = new Map(BOOKSTORES.map((store) => [store.id, store]));
+  const selectedStores = state.selectedStoreIds.map((id) => storeById.get(id)).filter(Boolean);
+  const originText = state.selectedOrigin.label || state.autocompleteEl?.value?.trim() || '';
+  const travelMode = getSelectedTravelMode();
+  const departureValidation = validateDepartureDate(travelMode);
+
+  const errors = [];
+  let firstInvalidFocusTarget = null;
+
+  if (!originText && !state.selectedOrigin.coords) {
+    errors.push('Enter or choose a starting location in Atlanta.');
+    firstInvalidFocusTarget ||= state.autocompleteEl;
+  }
+
+  if (!departureValidation.valid) {
+    setDepartureTimeError(departureValidation.message);
+    errors.push(departureValidation.message);
+    firstInvalidFocusTarget ||= dom.departureTime;
+  }
+
+  if (selectedStores.length === 0) {
+    const msg = 'Select at least one independent bookstore to plan your crawl.';
+    setStoreSelectionError(msg);
+    errors.push(msg);
+    firstInvalidFocusTarget ||= dom.storeList?.querySelector('.store-checkbox') || dom.storeFilter;
+  } else if (travelMode !== 'TRANSIT' && selectedStores.length > MAX_ROUTE_STOPS) {
+    const msg = `Google Routes supports up to ${MAX_ROUTE_STOPS} bookshop stops per route. Please uncheck ${selectedStores.length - MAX_ROUTE_STOPS} shop(s) or plan in regional segments.`;
+    setStoreSelectionError(msg);
+    errors.push(msg);
+    firstInvalidFocusTarget ||= dom.storeList?.querySelector('.store-checkbox') || dom.storeFilter;
+  }
+
+  if (errors.length > 0) {
+    showNotice(errors.join(' '), true);
+    firstInvalidFocusTarget?.focus?.();
+    return { valid: false };
+  }
+
+  return {
+    valid: true,
+    selectedStores,
+    originInput: state.selectedOrigin.coords || originText,
+    travelMode,
+    departureDate: departureValidation.date,
+  };
 }
 
 async function computeOptimizedRoute(originInput, selectedStores, travelMode, departureDate) {
@@ -1437,40 +1586,15 @@ async function calculateRoute(event) {
   if (event) event.preventDefault();
   clearNotice();
 
-  const storeById = new Map(BOOKSTORES.map((store) => [store.id, store]));
-  const selectedStores = state.selectedStoreIds.map((id) => storeById.get(id)).filter(Boolean);
-  if (selectedStores.length === 0) {
-    showNotice('Select at least one independent bookstore to plan your crawl.', true);
-    return;
-  }
+  const validation = validateCrawlForm();
+  if (!validation.valid) return;
 
-  const originText =
-    state.selectedOrigin.label || state.autocompleteEl?.value?.trim() || '';
-  if (!originText && !state.selectedOrigin.coords) {
-    showNotice('Enter or choose a starting location in Atlanta.', true);
-    return;
-  }
-
-  const originInput = state.selectedOrigin.coords || originText;
-  const travelMode = getSelectedTravelMode();
-
-  // Google Routes API supports up to 25 intermediate waypoints plus 1 destination (26 bookshop stops).
-  if (travelMode !== 'TRANSIT' && selectedStores.length > MAX_ROUTE_STOPS) {
-    showNotice(
-      `Google Routes supports up to ${MAX_ROUTE_STOPS} bookshop stops per route. Please uncheck ${selectedStores.length - MAX_ROUTE_STOPS} shop(s) or plan in regional segments.`,
-      true
-    );
-    return;
-  }
-
-  const { date: departureDate, notice: timeNotice } = getSelectedDepartureDate(travelMode);
+  const { selectedStores, originInput, travelMode, departureDate } = validation;
 
   if (travelMode === 'TRANSIT' && selectedStores.length > 1) {
     showNotice(
       'Transit route optimization is limited; routes will be calculated in the exact order selected.'
     );
-  } else if (timeNotice) {
-    showNotice(timeNotice);
   }
 
   dom.generateBtn.disabled = true;
@@ -1501,6 +1625,36 @@ async function calculateRoute(event) {
 function attachStaticListeners() {
   dom.form.addEventListener('submit', calculateRoute);
 
+  if (dom.setNowBtn && dom.departureTime) {
+    dom.setNowBtn.addEventListener('click', () => {
+      dom.departureTime.value = formatLocalDateTimeInput(new Date(Date.now() + 2 * 60 * 1000));
+      setDepartureTimeError('');
+      clearNotice();
+    });
+  }
+
+  if (dom.departureTime) {
+    const syncDepartureValidation = () => {
+      const result = validateDepartureDate(getSelectedTravelMode());
+      if (result.valid) {
+        setDepartureTimeError('');
+      } else if (dom.departureTime.classList.contains('is-invalid')) {
+        setDepartureTimeError(result.message);
+      }
+    };
+    dom.departureTime.addEventListener('input', syncDepartureValidation);
+    dom.departureTime.addEventListener('change', syncDepartureValidation);
+  }
+
+  dom.form.querySelectorAll('input[name="travelMode"]').forEach((radio) => {
+    radio.addEventListener('change', () => {
+      if (dom.departureTime?.classList.contains('is-invalid')) {
+        const result = validateDepartureDate(getSelectedTravelMode());
+        setDepartureTimeError(result.valid ? '' : result.message);
+      }
+    });
+  });
+
   if (dom.useMyLocationBtn) {
     dom.useMyLocationBtn.addEventListener('click', () => {
       requestCurrentLocation({ silentIfBlocked: false });
@@ -1508,9 +1662,13 @@ function attachStaticListeners() {
   }
 
   if (dom.storeFilter) {
-    dom.storeFilter.addEventListener('input', () => {
-      state.filterQuery = dom.storeFilter.value;
-      renderStoreList();
+    dom.storeFilter.addEventListener('input', filterStoreList);
+    dom.storeFilter.addEventListener('search', filterStoreList);
+    dom.storeFilter.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && dom.storeFilter.value) {
+        dom.storeFilter.value = '';
+        filterStoreList();
+      }
     });
   }
 
@@ -1521,6 +1679,9 @@ function attachStaticListeners() {
       (store) => store.id
     );
     state.stopOrderByStoreId = {};
+    if (state.selectedStoreIds.length > 0) {
+      setStoreSelectionError('');
+    }
     renderStoreList();
     refreshMarkers();
   });
@@ -1530,6 +1691,7 @@ function attachStaticListeners() {
     clearRouteOverlays();
     dom.itineraryContainer.replaceChildren();
     dom.resetBtn.hidden = true;
+    clearValidationErrors();
     clearNotice();
   });
 
@@ -1537,6 +1699,7 @@ function attachStaticListeners() {
     clearRouteOverlays();
     dom.itineraryContainer.replaceChildren();
     dom.resetBtn.hidden = true;
+    clearValidationErrors();
     clearNotice();
     if (state.map) {
       state.map.panTo(ATLANTA_CENTER);

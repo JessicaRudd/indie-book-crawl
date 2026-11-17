@@ -244,6 +244,24 @@ input[type='checkbox']:focus-visible {
   outline-offset: 2px;
 }
 
+.text-input.is-invalid,
+.store-list.is-invalid {
+  border-color: var(--error-text);
+  background-color: var(--error-bg);
+}
+
+.field-error {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--error-text);
+  line-height: 1.4;
+}
+
+.field-error[hidden] {
+  display: none;
+}
+
 .mode-toggle {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -383,7 +401,12 @@ input[type='checkbox']:focus-visible {
   text-align: center;
 }
 
-.store-item + .store-item {
+.store-item[hidden],
+.store-empty-row[hidden] {
+  display: none;
+}
+
+.store-item:not([hidden]) ~ .store-item:not([hidden]) {
   border-top: 1px solid var(--border-hairline);
 }
 
