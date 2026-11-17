@@ -1,5 +1,18 @@
 export const ATLANTA_CENTER = { lat: 33.86, lng: -84.33 };
 
+// Toggle `enabled: false` outside the November crawl season to hide the map corner popup.
+export const OFFICIAL_CRAWL_POPUP = {
+  enabled: true,
+  badgeText: 'Official Crawl · Nov 20–29',
+  triggerHint: 'Learn more',
+  eyebrow: 'Annual November Event',
+  title: 'Atlanta Indie Bookshop Crawl',
+  description:
+    'Hosted by Brave + Kind Bookshop with 38 other Atlanta-area independent bookstores leading up to Small Business Saturday. Pick up a passport at any participating shop, collect stamps for December discounts, and visit all stops to enter the raffle.',
+  linkLabel: 'Visit atlantaindiebookshopcrawl.com',
+  linkUrl: 'https://www.atlantaindiebookshopcrawl.com/',
+};
+
 export const QUICK_START_LOCATIONS = [
   {
     id: 'five-points',
@@ -564,6 +577,36 @@ export const BOOKSTORES = [
     isOfficialCrawl: true,
     defaultSelected: false,
   },
+  {
+    id: 'rejoice-christian-books',
+    name: 'Rejoice Christian Books & Gift Shop',
+    neighborhood: 'Snellville',
+    address: '2059 Scenic Hwy N Suite 110-B19, Snellville, GA 30078',
+    website: 'https://www.shoprejoice.com',
+    instagram: '@rejoicebooksandgifts',
+    hours: 'Hours vary; check shoprejoice.com or @rejoicebooksandgifts before visiting',
+    description:
+      'Christian bookstore and gift shop featuring faith-based books, Bibles, devotionals, inspirational reads, and gifts inside Painted Tree Shops in Snellville.',
+    coords: { lat: 33.866851, lng: -84.018229 },
+    isOpen: true,
+    isOfficialCrawl: true,
+    defaultSelected: false,
+  },
+  {
+    id: 'all-things-inspiration-east-cobb',
+    name: 'All Things Inspiration Giftique (East Cobb)',
+    neighborhood: 'Marietta · East Cobb',
+    address: '2745 Sandy Plains Rd Suite 156, Marietta, GA 30066',
+    website: 'https://www.allthingsinspichristianec.com',
+    instagram: '@allthingsinspirationgift',
+    hours: 'Hours vary; call (678) 250-3758 or check website for daily walk-in times',
+    description:
+      'East Cobb location of the Christian bookstore and gift boutique offering faith-based books, Bibles, devotionals, inspirational nonfiction, and gifts.',
+    coords: { lat: 34.016517, lng: -84.49409 },
+    isOpen: true,
+    isOfficialCrawl: true,
+    defaultSelected: false,
+  },
   // Additional independent metro Atlanta bookstores (year-round & upcoming)
   {
     id: 'bibliotech',
@@ -680,9 +723,9 @@ export const BOOKSTORES = [
     hours: 'Hours vary by events and workshops; check @impossiblemoonbookshop',
     description:
       'Black- and woman-owned indie bookstore on Hapeville’s main street focusing on contemporary fiction, children’s books, community events, and author workshops.',
-    coords: { lat: 33.6603, lng: -84.4025 },
+    coords: { lat: 33.658735, lng: -84.408228 },
     isOpen: true,
-    isOfficialCrawl: false,
+    isOfficialCrawl: true,
     defaultSelected: false,
   },
   {

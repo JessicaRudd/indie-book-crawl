@@ -1,5 +1,10 @@
 import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
-import { ATLANTA_CENTER, BOOKSTORES, QUICK_START_LOCATIONS } from './data.js';
+import {
+  ATLANTA_CENTER,
+  BOOKSTORES,
+  OFFICIAL_CRAWL_POPUP,
+  QUICK_START_LOCATIONS,
+} from './data.js';
 
 const USAGE_ATTRIBUTION_ID = 'gmp_mcp_codeassist_v1_aistudio';
 
@@ -25,6 +30,7 @@ const state = {
   routePolylines: [],
   lastRoutePlan: null,
   lastTravelMode: 'DRIVING',
+  activeInfoStoreId: null,
   libs: {},
 };
 
@@ -54,6 +60,7 @@ const dom = {
   savedRoutesCount: document.getElementById('saved-routes-count'),
   savedRoutesList: document.getElementById('saved-routes-list'),
   mapContainer: document.getElementById('map'),
+  crawlInfoWidget: document.getElementById('crawl-info-widget'),
   storeSelectionLive: document.getElementById('store-selection-live'),
   mapLiveRegion: document.getElementById('map-live-region'),
 };
@@ -657,6 +664,14 @@ function refreshMarkers() {
   BOOKSTORES.forEach((store) => {
     const marker = state.storeMarkers.get(store.id);
     if (!marker) return;
+    const isVisibleOnMap = !state.officialCrawlOnly || Boolean(store.isOfficialCrawl);
+    marker.map = isVisibleOnMap ? state.map : null;
+
+    if (!isVisibleOnMap && state.activeInfoStoreId === store.id && state.infoWindow) {
+      state.infoWindow.close();
+      state.activeInfoStoreId = null;
+    }
+
     const isSelected = state.selectedStoreIds.includes(store.id);
     const stopOrder = state.stopOrderByStoreId[store.id];
     marker.title = buildMarkerTitle(store, isSelected, stopOrder);
@@ -664,7 +679,7 @@ function refreshMarkers() {
       openStoreInfoWindow(store, { pan: true })
     );
     marker.replaceChildren(pin);
-    if (activeMarkerStoreId === store.id) {
+    if (isVisibleOnMap && activeMarkerStoreId === store.id) {
       pin.focus({ preventScroll: true });
     }
   });
@@ -799,6 +814,10 @@ function openStoreInfoWindow(store, { pan = false } = {}) {
     }
   }
   if (marker) {
+    if (!marker.map) {
+      marker.map = state.map;
+    }
+    state.activeInfoStoreId = store.id;
     state.infoWindow.setContent(buildInfoWindowContent(store));
     state.infoWindow.open({ anchor: marker, map: state.map });
   }
@@ -826,8 +845,9 @@ function renderStoreMarkers() {
 
   BOOKSTORES.forEach((store) => {
     const isSelected = isStoreOpen(store) && state.selectedStoreIds.includes(store.id);
+    const isVisibleOnMap = !state.officialCrawlOnly || Boolean(store.isOfficialCrawl);
     const marker = new AdvancedMarkerElement({
-      map: state.map,
+      map: isVisibleOnMap ? state.map : null,
       position: store.coords,
       title: buildMarkerTitle(store, isSelected, null),
     });
@@ -2066,10 +2086,16 @@ function attachStaticListeners() {
   if (dom.officialCrawlOnly) {
     dom.officialCrawlOnly.addEventListener('change', () => {
       const visibleCount = filterStoreList();
+      refreshMarkers();
       announceChecklistStatus(
         dom.officialCrawlOnly.checked
           ? `Showing ${visibleCount} official Atlanta Indie Bookshop Crawl stores.`
           : `Showing ${visibleCount} independent bookstores.`
+      );
+      announceMapStatus(
+        dom.officialCrawlOnly.checked
+          ? 'Map updated to show only official Atlanta Indie Bookshop Crawl bookstores.'
+          : 'Map updated to show all participating independent bookstores.'
       );
     });
   }
@@ -2203,10 +2229,186 @@ function attachStaticListeners() {
   });
 }
 
+function initCrawlInfoPopup() {
+  const widget = dom.crawlInfoWidget;
+  if (!widget) return;
+
+  if (!OFFICIAL_CRAWL_POPUP?.enabled) {
+    widget.hidden = true;
+    widget.replaceChildren();
+    return;
+  }
+
+  widget.hidden = false;
+
+  const triggerBtn = document.createElement('button');
+  triggerBtn.type = 'button';
+  triggerBtn.className = 'crawl-info-trigger';
+  triggerBtn.setAttribute('aria-expanded', 'false');
+  triggerBtn.setAttribute('aria-controls', 'crawl-info-popover');
+
+  const bookIconWrap = document.createElement('span');
+  bookIconWrap.className = 'crawl-info-icon';
+  bookIconWrap.setAttribute('aria-hidden', 'true');
+
+  const bookIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  bookIcon.setAttribute('width', '15');
+  bookIcon.setAttribute('height', '15');
+  bookIcon.setAttribute('viewBox', '0 0 24 24');
+  bookIcon.setAttribute('fill', 'none');
+  bookIcon.setAttribute('stroke', 'currentColor');
+  bookIcon.setAttribute('stroke-width', '2.2');
+  bookIcon.setAttribute('stroke-linecap', 'round');
+  bookIcon.setAttribute('stroke-linejoin', 'round');
+  bookIcon.setAttribute('aria-hidden', 'true');
+  bookIcon.innerHTML =
+    '<path d="M2 4.5A2.5 2.5 0 0 1 4.5 2H12v18H4.5A2.5 2.5 0 0 0 2 22V4.5Zm10-2.5h7.5A2.5 2.5 0 0 1 22 4.5V22a2.5 2.5 0 0 0-2.5-2H12V2Z"></path>';
+
+  const triggerDot = document.createElement('span');
+  triggerDot.className = 'crawl-info-dot';
+  bookIconWrap.appendChild(bookIcon);
+  bookIconWrap.appendChild(triggerDot);
+
+  const triggerText = document.createElement('span');
+  triggerText.className = 'crawl-info-label';
+  triggerText.textContent = OFFICIAL_CRAWL_POPUP.badgeText || 'Official Crawl';
+
+  const triggerCue = document.createElement('span');
+  triggerCue.className = 'crawl-info-cue';
+
+  const cueLabel = document.createElement('span');
+  cueLabel.textContent = OFFICIAL_CRAWL_POPUP.triggerHint || 'Learn more';
+
+  const chevronIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  chevronIcon.setAttribute('class', 'crawl-info-chevron');
+  chevronIcon.setAttribute('width', '13');
+  chevronIcon.setAttribute('height', '13');
+  chevronIcon.setAttribute('viewBox', '0 0 24 24');
+  chevronIcon.setAttribute('fill', 'none');
+  chevronIcon.setAttribute('stroke', 'currentColor');
+  chevronIcon.setAttribute('stroke-width', '2.5');
+  chevronIcon.setAttribute('stroke-linecap', 'round');
+  chevronIcon.setAttribute('stroke-linejoin', 'round');
+  chevronIcon.setAttribute('aria-hidden', 'true');
+  chevronIcon.innerHTML = '<polyline points="6 9 12 15 18 9"></polyline>';
+
+  triggerCue.appendChild(cueLabel);
+  triggerCue.appendChild(chevronIcon);
+
+  triggerBtn.appendChild(bookIconWrap);
+  triggerBtn.appendChild(triggerText);
+  triggerBtn.appendChild(triggerCue);
+
+  const card = document.createElement('section');
+  card.id = 'crawl-info-popover';
+  card.className = 'crawl-info-card';
+  card.setAttribute('aria-label', OFFICIAL_CRAWL_POPUP.title);
+  card.hidden = true;
+
+  const cardHeader = document.createElement('div');
+  cardHeader.className = 'crawl-info-card-header';
+
+  const eyebrow = document.createElement('p');
+  eyebrow.className = 'crawl-info-eyebrow';
+  eyebrow.textContent = OFFICIAL_CRAWL_POPUP.eyebrow;
+
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'crawl-info-close';
+  closeBtn.setAttribute('aria-label', 'Close official crawl info');
+  closeBtn.textContent = '×';
+
+  cardHeader.appendChild(eyebrow);
+  cardHeader.appendChild(closeBtn);
+
+  const title = document.createElement('h2');
+  title.className = 'crawl-info-title';
+  title.textContent = OFFICIAL_CRAWL_POPUP.title;
+
+  const desc = document.createElement('p');
+  desc.className = 'crawl-info-description';
+  desc.textContent = OFFICIAL_CRAWL_POPUP.description;
+
+  const link = document.createElement('a');
+  link.className = 'crawl-info-link';
+  link.href = OFFICIAL_CRAWL_POPUP.linkUrl;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.textContent = OFFICIAL_CRAWL_POPUP.linkLabel || 'Visit Official Crawl Site';
+
+  card.appendChild(cardHeader);
+  card.appendChild(title);
+  card.appendChild(desc);
+  card.appendChild(link);
+
+  widget.replaceChildren(triggerBtn, card);
+
+  let isPinnedOpen = false;
+  let hoverCloseTimer = null;
+
+  const setExpanded = (open) => {
+    card.hidden = !open;
+    widget.classList.toggle('is-open', open);
+    triggerBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  };
+
+  const clearHoverTimer = () => {
+    if (hoverCloseTimer) {
+      window.clearTimeout(hoverCloseTimer);
+      hoverCloseTimer = null;
+    }
+  };
+
+  widget.addEventListener('mouseenter', () => {
+    clearHoverTimer();
+    setExpanded(true);
+  });
+
+  widget.addEventListener('mouseleave', () => {
+    if (isPinnedOpen) return;
+    clearHoverTimer();
+    hoverCloseTimer = window.setTimeout(() => {
+      setExpanded(false);
+    }, 150);
+  });
+
+  triggerBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    clearHoverTimer();
+    isPinnedOpen = !isPinnedOpen || card.hidden;
+    setExpanded(isPinnedOpen);
+  });
+
+  closeBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    clearHoverTimer();
+    isPinnedOpen = false;
+    setExpanded(false);
+    triggerBtn.focus();
+  });
+
+  widget.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !card.hidden) {
+      clearHoverTimer();
+      isPinnedOpen = false;
+      setExpanded(false);
+      triggerBtn.focus();
+    }
+  });
+
+  document.addEventListener('click', (event) => {
+    if (isPinnedOpen && !widget.contains(event.target)) {
+      isPinnedOpen = false;
+      setExpanded(false);
+    }
+  });
+}
+
 async function initApp() {
   const { shouldAutoRoute, hasCustomOrigin } = applyRouteParamsFromUrl();
   renderStoreList();
   renderSavedRoutes();
+  initCrawlInfoPopup();
   attachStaticListeners();
 
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
@@ -2256,6 +2458,7 @@ async function initApp() {
 
     state.infoWindow = new InfoWindow();
     state.infoWindow.addListener('closeclick', () => {
+      state.activeInfoStoreId = null;
       announceMapStatus('Closed bookstore marker details.');
     });
     renderStoreMarkers();
