@@ -3,7 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#4a6b53" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="BookHop ATL" />
     <title>Atlanta Indie Bookshop Crawl</title>
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="icon" href="/favicon.ico" />
     <meta
       name="description"
@@ -28,7 +35,33 @@
     <div class="app-shell">
       <aside class="sidebar" aria-label="Crawl Route Planner">
         <header class="sidebar-header">
-          <p class="eyebrow">Atlanta &amp; Decatur Literary Trail</p>
+          <div class="sidebar-eyebrow-row">
+            <p class="eyebrow">Atlanta &amp; Decatur Literary Trail</p>
+            <div class="pwa-header-actions">
+              <span
+                id="offline-cache-badge"
+                class="offline-cache-badge"
+                title="Bookshop directory and app shell are cached on your device for spotty connections"
+                hidden
+              >
+                <span class="offline-cache-dot" aria-hidden="true"></span>
+                <span id="offline-cache-badge-text">Offline Ready</span>
+              </span>
+              <button
+                type="button"
+                id="pwa-install-btn"
+                class="pwa-install-btn"
+                hidden
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                <span id="pwa-install-btn-label">Install App</span>
+              </button>
+            </div>
+          </div>
           <h1 class="site-title">Atlanta Indie Bookshop Crawl</h1>
           <p class="site-subtitle">
             Chart an optimized route across Atlanta’s beloved independent bookshops by car, bike, or MARTA.
@@ -173,6 +206,21 @@
         </p>
         <div id="crawl-info-widget" class="crawl-info-widget" hidden></div>
         <div
+          id="connectivity-banner"
+          class="connectivity-banner"
+          role="status"
+          aria-live="polite"
+          hidden
+        >
+          <span class="connectivity-dot" aria-hidden="true"></span>
+          <span id="connectivity-banner-text">
+            Offline Mode — Cached bookshop directory &amp; saved crawls active.
+          </span>
+          <button type="button" id="retry-live-map-btn" class="connectivity-retry-btn" hidden>
+            Retry Live Map
+          </button>
+        </div>
+        <div
           id="map"
           class="map-canvas"
           aria-describedby="map-instructions"
@@ -185,6 +233,30 @@
           aria-atomic="true"
         ></div>
       </main>
+    </div>
+
+    <div
+      id="ios-install-modal"
+      class="pwa-modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="ios-install-title"
+      hidden
+    >
+      <div class="pwa-modal-card">
+        <h2 id="ios-install-title" class="pwa-modal-title">Install on iPhone or iPad</h2>
+        <p class="pwa-modal-text">
+          Save <strong>BookHop ATL</strong> to your home screen for quick access and offline bookshop lookup during the crawl:
+        </p>
+        <ol class="pwa-modal-steps">
+          <li>Tap the <strong>Share</strong> button in your Safari toolbar.</li>
+          <li>Scroll down and tap <strong>Add to Home Screen</strong>.</li>
+          <li>Tap <strong>Add</strong> in the top-right corner.</li>
+        </ol>
+        <button type="button" id="ios-install-close-btn" class="primary-btn pwa-modal-close-btn">
+          Got It
+        </button>
+      </div>
     </div>
 
     <script type="module" src="/main.js"></script>

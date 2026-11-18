@@ -1,4 +1,5 @@
 import { setOptions, importLibrary } from '@googlemaps/js-api-loader';
+import { registerSW } from 'virtual:pwa-register';
 import {
   ATLANTA_CENTER,
   BOOKSTORES,
@@ -10,6 +11,7 @@ const USAGE_ATTRIBUTION_ID = 'gmp_mcp_codeassist_v1_aistudio';
 
 const MAX_ROUTE_STOPS = 26;
 const SAVED_ROUTES_STORAGE_KEY = 'atlanta-indie-bookshop-crawl:saved-routes:v1';
+const LAST_ACTIVE_ROUTE_STORAGE_KEY = 'atlanta-indie-bookshop-crawl:last-active-route:v1';
 
 const state = {
   map: null,
@@ -31,6 +33,9 @@ const state = {
   lastRoutePlan: null,
   lastTravelMode: 'DRIVING',
   activeInfoStoreId: null,
+  isOfflineMapActive: false,
+  isServiceWorkerReady: false,
+  deferredInstallPrompt: null,
   libs: {},
 };
 
@@ -61,6 +66,15 @@ const dom = {
   savedRoutesList: document.getElementById('saved-routes-list'),
   mapContainer: document.getElementById('map'),
   crawlInfoWidget: document.getElementById('crawl-info-widget'),
+  connectivityBanner: document.getElementById('connectivity-banner'),
+  connectivityBannerText: document.getElementById('connectivity-banner-text'),
+  retryLiveMapBtn: document.getElementById('retry-live-map-btn'),
+  offlineCacheBadge: document.getElementById('offline-cache-badge'),
+  offlineCacheBadgeText: document.getElementById('offline-cache-badge-text'),
+  pwaInstallBtn: document.getElementById('pwa-install-btn'),
+  pwaInstallBtnLabel: document.getElementById('pwa-install-btn-label'),
+  iosInstallModal: document.getElementById('ios-install-modal'),
+  iosInstallCloseBtn: document.getElementById('ios-install-close-btn'),
   storeSelectionLive: document.getElementById('store-selection-live'),
   mapLiveRegion: document.getElementById('map-live-region'),
 };
@@ -657,6 +671,11 @@ function renderStoreList() {
 }
 
 function refreshMarkers() {
+  if (state.isOfflineMapActive) {
+    renderOfflineSvgMap();
+    return;
+  }
+
   const activeMarkerStoreId = document.activeElement?.classList?.contains('book-marker')
     ? document.activeElement.dataset.storeId
     : null;
@@ -805,6 +824,14 @@ function buildInfoWindowContent(store) {
 }
 
 function openStoreInfoWindow(store, { pan = false } = {}) {
+  if (state.isOfflineMapActive) {
+    state.activeInfoStoreId = store.id;
+    renderOfflineSvgMap();
+    announceMapStatus(
+      `Offline map focused on ${store.name}, ${store.neighborhood}, ${store.address}.`
+    );
+    return;
+  }
   if (!state.map || !state.infoWindow) return;
   const marker = state.storeMarkers.get(store.id);
   if (pan) {
@@ -1245,13 +1272,105 @@ function buildStepInstructionText(step) {
   return step.instructions || 'Continue along route';
 }
 
+function serializeRoutePlanForCache(routePlan, travelMode) {
+  return {
+    cachedAt: new Date().toISOString(),
+    travelMode,
+    origin: {
+      label: state.selectedOrigin.label,
+      coords: state.selectedOrigin.coords ? { ...state.selectedOrigin.coords } : null,
+      isCurrentLocation: Boolean(state.selectedOrigin.isCurrentLocation),
+    },
+    departureTime: dom.departureTime?.value || '',
+    orderedStoreIds: (routePlan.orderedStores || []).map((s) => s.id),
+    totalDurationMs: routePlan.totalDurationMs ?? 0,
+    totalDistanceMeters: routePlan.totalDistanceMeters ?? 0,
+    isOfflineEstimate: Boolean(routePlan.isOfflineEstimate),
+    legs: (routePlan.legs || []).map((entry) => ({
+      fromLabel: entry.fromLabel,
+      toLabel: entry.toLabel,
+      leg: {
+        durationMillis: entry.leg?.durationMillis ?? 0,
+        distanceMeters: entry.leg?.distanceMeters ?? 0,
+        localizedValues: entry.leg?.localizedValues
+          ? {
+              duration: entry.leg.localizedValues.duration,
+              distance: entry.leg.localizedValues.distance,
+            }
+          : undefined,
+        steps: (entry.leg?.steps || []).map((step) => ({
+          instructions: buildStepInstructionText(step),
+          localizedValues: step.localizedValues
+            ? {
+                distance: step.localizedValues.distance,
+                staticDuration: step.localizedValues.staticDuration,
+              }
+            : undefined,
+        })),
+      },
+    })),
+  };
+}
+
+function hydrateCachedRoutePlan(cached) {
+  if (!cached || !Array.isArray(cached.orderedStoreIds)) return null;
+  const storeById = new Map(BOOKSTORES.map((s) => [s.id, s]));
+  const orderedStores = cached.orderedStoreIds.map((id) => storeById.get(id)).filter(Boolean);
+  if (orderedStores.length === 0) return null;
+  return {
+    orderedStores,
+    routes: [],
+    legs: Array.isArray(cached.legs) ? cached.legs : [],
+    totalDurationMs: cached.totalDurationMs ?? 0,
+    totalDistanceMeters: cached.totalDistanceMeters ?? 0,
+    isOfflineEstimate: Boolean(cached.isOfflineEstimate),
+  };
+}
+
+function cacheLastActiveRoute(routePlan, travelMode) {
+  try {
+    const payload = serializeRoutePlanForCache(routePlan, travelMode);
+    window.localStorage.setItem(LAST_ACTIVE_ROUTE_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
+function readLastActiveRoute() {
+  try {
+    const raw = window.localStorage.getItem(LAST_ACTIVE_ROUTE_STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 function renderRoute(routePlan, travelMode) {
+  const orderMap = {};
+  routePlan.orderedStores.forEach((store, idx) => {
+    orderMap[store.id] = idx + 1;
+  });
+  state.stopOrderByStoreId = orderMap;
+  state.lastRoutePlan = routePlan;
+  state.lastTravelMode = travelMode;
+  cacheLastActiveRoute(routePlan, travelMode);
+
+  if (state.isOfflineMapActive || !state.map || !state.libs.marker || !state.libs.core) {
+    renderStoreList();
+    renderOfflineSvgMap();
+    renderItinerary(routePlan, travelMode);
+    dom.resetBtn.hidden = false;
+    return;
+  }
+
   const { AdvancedMarkerElement } = state.libs.marker;
   const { LatLngBounds } = state.libs.core;
 
   const polylineColor = travelMode === 'BICYCLING' ? '#4A6B53' : '#C2592B';
 
-  routePlan.routes.forEach((route) => {
+  (routePlan.routes || []).forEach((route) => {
+    if (typeof route.createPolylines !== 'function') return;
     const polylines = route.createPolylines({
       polylineOptions:
         travelMode === 'TRANSIT'
@@ -1268,6 +1387,26 @@ function renderRoute(routePlan, travelMode) {
     });
   });
 
+  if (
+    (!routePlan.routes || routePlan.routes.length === 0) &&
+    state.libs.maps?.Polyline &&
+    routePlan.orderedStores.length > 0
+  ) {
+    const pathCoords = [
+      ...(state.selectedOrigin.coords ? [state.selectedOrigin.coords] : []),
+      ...routePlan.orderedStores.map((s) => s.coords),
+    ];
+    const fallbackLine = new state.libs.maps.Polyline({
+      path: pathCoords,
+      geodesic: true,
+      strokeColor: polylineColor,
+      strokeOpacity: 0.85,
+      strokeWeight: 4,
+      map: state.map,
+    });
+    state.routePolylines.push(fallbackLine);
+  }
+
   if (state.selectedOrigin.coords) {
     state.originMarker = new AdvancedMarkerElement({
       map: state.map,
@@ -1277,11 +1416,6 @@ function renderRoute(routePlan, travelMode) {
     state.originMarker.append(createOriginPinElement(state.selectedOrigin.label));
   }
 
-  const orderMap = {};
-  routePlan.orderedStores.forEach((store, idx) => {
-    orderMap[store.id] = idx + 1;
-  });
-  state.stopOrderByStoreId = orderMap;
   renderStoreList();
   refreshMarkers();
 
@@ -1290,15 +1424,13 @@ function renderRoute(routePlan, travelMode) {
     bounds.extend(state.selectedOrigin.coords);
   }
   routePlan.orderedStores.forEach((store) => bounds.extend(store.coords));
-  routePlan.routes.forEach((route) => {
+  (routePlan.routes || []).forEach((route) => {
     if (route.viewport) {
       bounds.union(route.viewport);
     }
   });
   state.map.fitBounds(bounds, { top: 48, right: 48, bottom: 48, left: 48 });
 
-  state.lastRoutePlan = routePlan;
-  state.lastTravelMode = travelMode;
   renderItinerary(routePlan, travelMode);
   dom.resetBtn.hidden = false;
 
@@ -1588,6 +1720,7 @@ function renderSavedRoutes() {
 
 function saveCurrentRoute(customName, routePlan, travelMode) {
   const orderedIds = routePlan.orderedStores.map((store) => store.id);
+  const serializedPlan = serializeRoutePlanForCache(routePlan, travelMode);
   const entry = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     name: customName.trim() || getDefaultCrawlName(routePlan.orderedStores),
@@ -1602,6 +1735,7 @@ function saveCurrentRoute(customName, routePlan, travelMode) {
     storeIds: orderedIds,
     totalDurationText: formatDurationMs(routePlan.totalDurationMs),
     totalDistanceText: formatMiles(routePlan.totalDistanceMeters),
+    cachedPlan: serializedPlan,
   };
 
   const existing = readSavedRoutes();
@@ -1639,7 +1773,15 @@ async function loadSavedRoute(saved) {
   refreshMarkers();
   clearNotice();
 
-  if (state.map && state.selectedStoreIds.length > 0) {
+  if (state.selectedStoreIds.length > 0) {
+    if ((!navigator.onLine || !state.map) && saved.cachedPlan) {
+      const hydrated = hydrateCachedRoutePlan(saved.cachedPlan);
+      if (hydrated) {
+        renderRoute(hydrated, saved.travelMode || 'DRIVING');
+        showNotice('Loaded saved crawl from offline device cache.');
+        return;
+      }
+    }
     await calculateRoute();
   }
 }
@@ -1962,6 +2104,95 @@ function renderItinerary(routePlan, travelMode) {
   dom.itineraryContainer.replaceChildren(fragment);
 }
 
+function haversineMeters(a, b) {
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const R = 6371000;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const sinLat = Math.sin(dLat / 2);
+  const sinLng = Math.sin(dLng / 2);
+  const h =
+    sinLat * sinLat +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * sinLng * sinLng;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+function computeOfflineEstimatedRoute(selectedStores, travelMode) {
+  const originCoords = state.selectedOrigin.coords || ATLANTA_CENTER;
+  const remaining = [...selectedStores];
+  const orderedStores = [];
+  let cursorCoords = originCoords;
+
+  // Nearest-neighbor waypoint ordering for Driving & Bicycling; preserve selection order for Transit
+  if (travelMode === 'TRANSIT') {
+    orderedStores.push(...remaining);
+  } else {
+    while (remaining.length > 0) {
+      let bestIdx = 0;
+      let bestDist = Infinity;
+      for (let i = 0; i < remaining.length; i += 1) {
+        const d = haversineMeters(cursorCoords, remaining[i].coords);
+        if (d < bestDist) {
+          bestDist = d;
+          bestIdx = i;
+        }
+      }
+      const [nextStore] = remaining.splice(bestIdx, 1);
+      orderedStores.push(nextStore);
+      cursorCoords = nextStore.coords;
+    }
+  }
+
+  // Road distance multiplier (~1.32x straight-line) and typical metro speed by mode
+  const metersPerSecond =
+    travelMode === 'BICYCLING' ? 4.8 : travelMode === 'TRANSIT' ? 6.5 : 11.2;
+  const legs = [];
+  let totalDistanceMeters = 0;
+  let totalDurationMs = 0;
+
+  orderedStores.forEach((store, idx) => {
+    const fromCoords = idx === 0 ? originCoords : orderedStores[idx - 1].coords;
+    const fromLabel =
+      idx === 0 ? state.selectedOrigin.label || 'Atlanta Start' : orderedStores[idx - 1].name;
+    const rawMeters = haversineMeters(fromCoords, store.coords);
+    const estRoadMeters = Math.max(400, Math.round(rawMeters * 1.32));
+    const estDurationMs = Math.max(120000, Math.round((estRoadMeters / metersPerSecond) * 1000));
+    totalDistanceMeters += estRoadMeters;
+    totalDurationMs += estDurationMs;
+
+    legs.push({
+      fromLabel,
+      toLabel: store.name,
+      leg: {
+        durationMillis: estDurationMs,
+        distanceMeters: estRoadMeters,
+        localizedValues: {
+          duration: `${formatDurationMs(estDurationMs)} (est.)`,
+          distance: `${formatMiles(estRoadMeters)} (est.)`,
+        },
+        steps: [
+          {
+            instructions: `Head toward ${store.name} in ${store.neighborhood} (${store.address}).`,
+            localizedValues: {
+              distance: formatMiles(estRoadMeters),
+              staticDuration: formatDurationMs(estDurationMs),
+            },
+          },
+        ],
+      },
+    });
+  });
+
+  return {
+    orderedStores,
+    routes: [],
+    legs,
+    totalDurationMs,
+    totalDistanceMeters,
+    isOfflineEstimate: true,
+  };
+}
+
 async function calculateRoute(event) {
   if (event) event.preventDefault();
   clearNotice();
@@ -1970,6 +2201,15 @@ async function calculateRoute(event) {
   if (!validation.valid) return;
 
   const { selectedStores, originInput, travelMode, departureDate } = validation;
+
+  if (!navigator.onLine || !state.libs.routes) {
+    const offlinePlan = computeOfflineEstimatedRoute(selectedStores, travelMode);
+    renderRoute(offlinePlan, travelMode);
+    showNotice(
+      'Offline Mode: Generated an estimated route using cached bookshop coordinates. Reconnect and click Generate Route for live turn-by-turn traffic & transit directions.'
+    );
+    return;
+  }
 
   if (travelMode === 'TRANSIT' && selectedStores.length > 1) {
     showNotice(
@@ -1991,10 +2231,10 @@ async function calculateRoute(event) {
     renderRoute(routePlan, travelMode);
   } catch (error) {
     console.error('Route calculation failed:', error);
+    const offlinePlan = computeOfflineEstimatedRoute(selectedStores, travelMode);
+    renderRoute(offlinePlan, travelMode);
     showNotice(
-      error?.message ||
-        'Unable to calculate route. Please verify your starting address, selected stops, and API settings.',
-      true
+      'Spotty connection detected: Showing estimated stop order and distances from cached bookshop data. Retry when signal improves for live turn-by-turn directions.'
     );
   } finally {
     dom.generateBtn.disabled = false;
@@ -2204,6 +2444,12 @@ function attachStaticListeners() {
 
   dom.clearStoresBtn.addEventListener('click', () => {
     state.selectedStoreIds = [];
+    state.lastRoutePlan = null;
+    try {
+      window.localStorage.removeItem(LAST_ACTIVE_ROUTE_STORAGE_KEY);
+    } catch {
+      // Ignore storage errors
+    }
     clearRouteOverlays();
     dom.itineraryContainer.replaceChildren();
     dom.resetBtn.hidden = true;
@@ -2216,6 +2462,12 @@ function attachStaticListeners() {
   });
 
   dom.resetBtn.addEventListener('click', () => {
+    state.lastRoutePlan = null;
+    try {
+      window.localStorage.removeItem(LAST_ACTIVE_ROUTE_STORAGE_KEY);
+    } catch {
+      // Ignore storage errors
+    }
     clearRouteOverlays();
     dom.itineraryContainer.replaceChildren();
     dom.resetBtn.hidden = true;
@@ -2404,13 +2656,317 @@ function initCrawlInfoPopup() {
   });
 }
 
-async function initApp() {
-  const { shouldAutoRoute, hasCustomOrigin } = applyRouteParamsFromUrl();
-  renderStoreList();
-  renderSavedRoutes();
-  initCrawlInfoPopup();
-  attachStaticListeners();
+function renderOfflineSvgMap() {
+  if (!dom.mapContainer) return;
+  state.isOfflineMapActive = true;
 
+  const visibleStores = BOOKSTORES.filter(
+    (store) => !state.officialCrawlOnly || Boolean(store.isOfficialCrawl)
+  );
+  const allLats = BOOKSTORES.map((s) => s.coords.lat);
+  const allLngs = BOOKSTORES.map((s) => s.coords.lng);
+  const minLat = Math.min(...allLats) - 0.04;
+  const maxLat = Math.max(...allLats) + 0.04;
+  const minLng = Math.min(...allLngs) - 0.05;
+  const maxLng = Math.max(...allLngs) + 0.05;
+
+  const width = 900;
+  const height = 680;
+  const project = (coords) => {
+    const x = ((coords.lng - minLng) / (maxLng - minLng)) * (width - 80) + 40;
+    const y = ((maxLat - coords.lat) / (maxLat - minLat)) * (height - 80) + 40;
+    return { x: Number(x.toFixed(1)), y: Number(y.toFixed(1)) };
+  };
+
+  const shell = document.createElement('div');
+  shell.className = 'offline-map-shell';
+
+  const legend = document.createElement('div');
+  legend.className = 'offline-map-legend';
+  legend.textContent = `Offline Cached Map (${visibleStores.length} shops)`;
+  shell.appendChild(legend);
+
+  const svgNs = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNs, 'svg');
+  svg.setAttribute('class', 'offline-map-svg');
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('role', 'img');
+  svg.setAttribute(
+    'aria-label',
+    'Offline interactive coordinate map of Atlanta and Decatur independent bookstores'
+  );
+
+  // Subtle lat/lng reference grid
+  for (let i = 1; i < 6; i += 1) {
+    const gx = (width / 6) * i;
+    const gy = (height / 6) * i;
+    const vLine = document.createElementNS(svgNs, 'line');
+    vLine.setAttribute('class', 'offline-map-grid-line');
+    vLine.setAttribute('x1', String(gx));
+    vLine.setAttribute('y1', '0');
+    vLine.setAttribute('x2', String(gx));
+    vLine.setAttribute('y2', String(height));
+    svg.appendChild(vLine);
+
+    const hLine = document.createElementNS(svgNs, 'line');
+    hLine.setAttribute('class', 'offline-map-grid-line');
+    hLine.setAttribute('x1', '0');
+    hLine.setAttribute('y1', String(gy));
+    hLine.setAttribute('x2', String(width));
+    hLine.setAttribute('y2', String(gy));
+    svg.appendChild(hLine);
+  }
+
+  // Approximate I-285 Perimeter ring around Atlanta center
+  const centerPt = project(ATLANTA_CENTER);
+  const perimeter = document.createElementNS(svgNs, 'ellipse');
+  perimeter.setAttribute('class', 'offline-map-perimeter');
+  perimeter.setAttribute('cx', String(centerPt.x));
+  perimeter.setAttribute('cy', String(centerPt.y));
+  perimeter.setAttribute('rx', '135');
+  perimeter.setAttribute('ry', '115');
+  svg.appendChild(perimeter);
+
+  // Regional labels
+  const regions = [
+    { label: 'Midtown / Intown', coords: { lat: 33.775, lng: -84.385 } },
+    { label: 'Decatur', coords: { lat: 33.7748, lng: -84.2963 } },
+    { label: 'Marietta / NW', coords: { lat: 33.9526, lng: -84.5499 } },
+    { label: 'Roswell / Alpharetta', coords: { lat: 34.045, lng: -84.33 } },
+    { label: 'Duluth / Lawrenceville', coords: { lat: 33.965, lng: -84.07 } },
+    { label: 'South Metro / Fayetteville', coords: { lat: 33.48, lng: -84.45 } },
+  ];
+  regions.forEach((reg) => {
+    const pt = project(reg.coords);
+    const txt = document.createElementNS(svgNs, 'text');
+    txt.setAttribute('class', 'offline-map-area-label');
+    txt.setAttribute('x', String(pt.x));
+    txt.setAttribute('y', String(pt.y));
+    txt.setAttribute('text-anchor', 'middle');
+    txt.textContent = reg.label;
+    svg.appendChild(txt);
+  });
+
+  // Active route line
+  if (state.lastRoutePlan?.orderedStores?.length > 0) {
+    const pts = [
+      ...(state.selectedOrigin.coords ? [project(state.selectedOrigin.coords)] : []),
+      ...state.lastRoutePlan.orderedStores.map((s) => project(s.coords)),
+    ];
+    const polyline = document.createElementNS(svgNs, 'polyline');
+    polyline.setAttribute('class', 'offline-map-route-line');
+    polyline.setAttribute('points', pts.map((p) => `${p.x},${p.y}`).join(' '));
+    svg.appendChild(polyline);
+  }
+
+  // Origin marker
+  if (state.selectedOrigin.coords) {
+    const oPt = project(state.selectedOrigin.coords);
+    const oCircle = document.createElementNS(svgNs, 'circle');
+    oCircle.setAttribute('class', 'offline-map-origin-circle');
+    oCircle.setAttribute('cx', String(oPt.x));
+    oCircle.setAttribute('cy', String(oPt.y));
+    oCircle.setAttribute('r', '8');
+    svg.appendChild(oCircle);
+  }
+
+  // Bookstore pins
+  visibleStores.forEach((store) => {
+    const open = isStoreOpen(store);
+    const isSelected = open && state.selectedStoreIds.includes(store.id);
+    const stopOrder = state.stopOrderByStoreId[store.id];
+    const pt = project(store.coords);
+
+    const g = document.createElementNS(svgNs, 'g');
+    g.setAttribute(
+      'class',
+      `offline-map-pin-group${!open ? ' is-coming-soon' : isSelected ? ' is-selected' : ''}`
+    );
+    g.setAttribute('tabindex', '0');
+    g.setAttribute('role', 'button');
+    g.setAttribute('aria-label', buildMarkerAriaLabel(store, isSelected, stopOrder));
+
+    const titleEl = document.createElementNS(svgNs, 'title');
+    titleEl.textContent = buildMarkerTitle(store, isSelected, stopOrder);
+    g.appendChild(titleEl);
+
+    const circle = document.createElementNS(svgNs, 'circle');
+    circle.setAttribute('class', 'offline-map-pin-circle');
+    circle.setAttribute('cx', String(pt.x));
+    circle.setAttribute('cy', String(pt.y));
+    circle.setAttribute('r', stopOrder || isSelected ? '11' : '8.5');
+    g.appendChild(circle);
+
+    if (stopOrder) {
+      const num = document.createElementNS(svgNs, 'text');
+      num.setAttribute('class', 'offline-map-pin-text');
+      num.setAttribute('x', String(pt.x));
+      num.setAttribute('y', String(pt.y));
+      num.textContent = String(stopOrder);
+      g.appendChild(num);
+    }
+
+    const activateStore = () => {
+      state.activeInfoStoreId = store.id;
+      renderOfflineSvgMap();
+    };
+    g.addEventListener('click', activateStore);
+    g.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        activateStore();
+      }
+    });
+
+    svg.appendChild(g);
+  });
+
+  shell.appendChild(svg);
+
+  // Detail card if a store is selected for inspection on the offline map
+  const activeStore = BOOKSTORES.find((s) => s.id === state.activeInfoStoreId);
+  if (activeStore) {
+    const detailWrap = document.createElement('div');
+    detailWrap.className = 'offline-map-detail-card';
+    const headerRow = document.createElement('div');
+    headerRow.className = 'offline-map-detail-header';
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'crawl-info-close';
+    closeBtn.setAttribute('aria-label', 'Close bookstore details');
+    closeBtn.textContent = '×';
+    closeBtn.addEventListener('click', () => {
+      state.activeInfoStoreId = null;
+      renderOfflineSvgMap();
+    });
+    const contentCard = buildInfoWindowContent(activeStore);
+    headerRow.appendChild(contentCard);
+    headerRow.appendChild(closeBtn);
+    detailWrap.appendChild(headerRow);
+    shell.appendChild(detailWrap);
+  }
+
+  dom.mapContainer.replaceChildren(shell);
+}
+
+function updateConnectivityUI() {
+  const isOnline = navigator.onLine;
+  if (dom.offlineCacheBadge) {
+    dom.offlineCacheBadge.hidden = !state.isServiceWorkerReady && isOnline;
+    dom.offlineCacheBadge.classList.toggle('is-offline', !isOnline);
+    if (dom.offlineCacheBadgeText) {
+      dom.offlineCacheBadgeText.textContent = isOnline ? 'Offline Ready' : 'Offline Mode';
+    }
+  }
+
+  if (dom.connectivityBanner) {
+    const showBanner = !isOnline || state.isOfflineMapActive;
+    dom.connectivityBanner.hidden = !showBanner;
+    if (dom.connectivityBannerText) {
+      dom.connectivityBannerText.textContent = !isOnline
+        ? 'Offline Mode — Cached bookshop directory & saved crawls active.'
+        : 'Spotty connection — Using cached offline bookshop map.';
+    }
+    if (dom.retryLiveMapBtn) {
+      dom.retryLiveMapBtn.hidden = !state.isOfflineMapActive;
+    }
+  }
+}
+
+function initPwaAndOfflineSupport(onRetryLiveMap) {
+  // 1. Register Workbox Service Worker and warm /bookshops.json in CacheStorage
+  if ('serviceWorker' in navigator) {
+    registerSW({
+      immediate: true,
+      onOfflineReady() {
+        state.isServiceWorkerReady = true;
+        updateConnectivityUI();
+      },
+      onRegisteredSW() {
+        state.isServiceWorkerReady = true;
+        updateConnectivityUI();
+        fetch('./bookshops.json').catch(() => {});
+      },
+    });
+  }
+
+  // 2. Listen for online/offline transitions
+  window.addEventListener('online', () => {
+    updateConnectivityUI();
+    if (state.isOfflineMapActive && typeof onRetryLiveMap === 'function') {
+      onRetryLiveMap();
+    }
+  });
+  window.addEventListener('offline', () => {
+    updateConnectivityUI();
+  });
+
+  if (dom.retryLiveMapBtn && typeof onRetryLiveMap === 'function') {
+    dom.retryLiveMapBtn.addEventListener('click', () => {
+      onRetryLiveMap();
+    });
+  }
+
+  // 3. In-App PWA Install Prompt (Chromium beforeinstallprompt + iOS Safari fallback)
+  const isStandalone =
+    window.matchMedia?.('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true;
+  const ua = window.navigator.userAgent.toLowerCase();
+  const isIOS = /iphone|ipad|ipod/.test(ua) && !isStandalone;
+
+  if (!isStandalone && dom.pwaInstallBtn) {
+    if (isIOS) {
+      dom.pwaInstallBtn.hidden = false;
+      if (dom.pwaInstallBtnLabel) {
+        dom.pwaInstallBtnLabel.textContent = 'Install on iOS';
+      }
+    }
+
+    window.addEventListener('beforeinstallprompt', (event) => {
+      event.preventDefault();
+      state.deferredInstallPrompt = event;
+      dom.pwaInstallBtn.hidden = false;
+      if (dom.pwaInstallBtnLabel) {
+        dom.pwaInstallBtnLabel.textContent = 'Install App';
+      }
+    });
+
+    window.addEventListener('appinstalled', () => {
+      state.deferredInstallPrompt = null;
+      dom.pwaInstallBtn.hidden = true;
+    });
+
+    dom.pwaInstallBtn.addEventListener('click', async () => {
+      if (state.deferredInstallPrompt) {
+        await state.deferredInstallPrompt.prompt();
+        const choice = await state.deferredInstallPrompt.userChoice;
+        if (choice?.outcome === 'accepted') {
+          dom.pwaInstallBtn.hidden = true;
+        }
+        state.deferredInstallPrompt = null;
+      } else if (isIOS && dom.iosInstallModal) {
+        dom.iosInstallModal.hidden = false;
+        dom.iosInstallCloseBtn?.focus();
+      }
+    });
+  }
+
+  if (dom.iosInstallModal && dom.iosInstallCloseBtn) {
+    dom.iosInstallCloseBtn.addEventListener('click', () => {
+      dom.iosInstallModal.hidden = true;
+      dom.pwaInstallBtn?.focus();
+    });
+    dom.iosInstallModal.addEventListener('click', (event) => {
+      if (event.target === dom.iosInstallModal) {
+        dom.iosInstallModal.hidden = true;
+      }
+    });
+  }
+
+  updateConnectivityUI();
+}
+
+async function connectLiveGoogleMap({ shouldAutoRoute = false, hasCustomOrigin = false } = {}) {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
   if (!apiKey) {
     dom.mapContainer.innerHTML = `
@@ -2443,6 +2999,10 @@ async function initApp() {
       marker: markerLib,
       core: coreLib,
     };
+    state.isOfflineMapActive = false;
+    state.storeMarkers.clear();
+    dom.mapContainer.replaceChildren();
+    updateConnectivityUI();
 
     const { Map: GoogleMap, InfoWindow } = mapsLib;
     // mapId is required to render AdvancedMarkerElement instances.
@@ -2462,10 +3022,14 @@ async function initApp() {
       announceMapStatus('Closed bookstore marker details.');
     });
     renderStoreMarkers();
-    initAutocomplete();
+    if (!state.autocompleteEl) {
+      initAutocomplete();
+    }
 
     if (shouldAutoRoute) {
       await calculateRoute();
+    } else if (state.lastRoutePlan) {
+      renderRoute(state.lastRoutePlan, state.lastTravelMode);
     } else if (!hasCustomOrigin && navigator.permissions?.query) {
       // Auto-detect current location on load only if permission was already granted.
       navigator.permissions
@@ -2479,11 +3043,60 @@ async function initApp() {
     }
   } catch (error) {
     console.error('Failed to load Google Maps Platform libraries:', error);
+    renderOfflineSvgMap();
+    updateConnectivityUI();
     showNotice(
-      'Unable to load Google Maps. Please check your network connection and API key configuration.',
-      true
+      'Spotty or offline connection: Switched to the cached offline bookshop map. All 50 bookshops and saved crawls remain accessible.'
     );
   }
+}
+
+async function initApp() {
+  const { shouldAutoRoute, hasCustomOrigin } = applyRouteParamsFromUrl();
+  renderStoreList();
+  renderSavedRoutes();
+  initCrawlInfoPopup();
+  attachStaticListeners();
+
+  // Restore last active route from device cache if no URL route override was supplied
+  if (!shouldAutoRoute) {
+    const cachedActive = readLastActiveRoute();
+    const hydrated = hydrateCachedRoutePlan(cachedActive);
+    if (hydrated) {
+      state.selectedStoreIds = hydrated.orderedStores.map((s) => s.id);
+      if (cachedActive.origin) {
+        state.selectedOrigin = {
+          label: cachedActive.origin.label || QUICK_START_LOCATIONS[0].label,
+          coords: cachedActive.origin.coords ? { ...cachedActive.origin.coords } : null,
+          isCurrentLocation: Boolean(cachedActive.origin.isCurrentLocation),
+        };
+        updateOriginReadout();
+        renderQuickStartButtons();
+      }
+      if (cachedActive.travelMode) {
+        setSelectedTravelMode(cachedActive.travelMode);
+        state.lastTravelMode = cachedActive.travelMode;
+      }
+      state.lastRoutePlan = hydrated;
+    }
+  }
+
+  initPwaAndOfflineSupport(() =>
+    connectLiveGoogleMap({ shouldAutoRoute: false, hasCustomOrigin: true })
+  );
+
+  if (!navigator.onLine) {
+    renderOfflineSvgMap();
+    updateConnectivityUI();
+    if (shouldAutoRoute) {
+      await calculateRoute();
+    } else if (state.lastRoutePlan) {
+      renderRoute(state.lastRoutePlan, state.lastTravelMode);
+    }
+    return;
+  }
+
+  await connectLiveGoogleMap({ shouldAutoRoute, hasCustomOrigin });
 }
 
 initApp();

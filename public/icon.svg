@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4a6b53" />
+      <stop offset="100%" stop-color="#35503d" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+  <circle cx="256" cy="256" r="196" fill="#f8f4ec" stroke="#c2592b" stroke-width="12" />
+  <g transform="translate(136, 140)" fill="none" stroke="#261c15" stroke-width="20" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 36A28 28 0 0 1 48 8h72v200H48a28 28 0 0 0-28 24V36Z" fill="#fffdf8" stroke="#4a6b53" />
+    <path d="M120 8h72a28 28 0 0 1 28 28v196a28 28 0 0 0-28-24h-72V8Z" fill="#faece5" stroke="#c2592b" />
+    <line x1="56" y1="64" x2="96" y2="64" stroke="#4a6b53" stroke-width="14" />
+    <line x1="56" y1="104" x2="96" y2="104" stroke="#4a6b53" stroke-width="14" />
+    <line x1="144" y1="64" x2="184" y2="64" stroke="#c2592b" stroke-width="14" />
+    <line x1="144" y1="104" x2="184" y2="104" stroke="#c2592b" stroke-width="14" />
+  </g>
+</svg>
